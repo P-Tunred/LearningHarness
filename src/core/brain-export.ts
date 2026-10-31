@@ -1,31 +1,45 @@
 /**
  * Second Brain export (fork addition) — PURE: chat records + derived graph
- * in, Markdown notes + a stats document out. No IO here; the server module
- * (src/server/brain.ts) reads the stores and writes the files.
+ * in, a COARSE learning overview + a stats document out. No IO here; the
+ * server module (src/server/brain.ts) reads the stores and writes the files.
  *
- * Layout inside the brain folder (approved plan, 2026-10-31):
- *   LearnHarness/Sessions/<YYYY-MM-DD> <title>.md   one note per session
- *   LearnHarness/Aussagen/<name>.md                one note per proposition
- *   LearnHarness/learnharness-stats.json           for the Morning Dashboard
- * Links are full-path wikilinks ([[LearnHarness/Aussagen/X|X]]) so they never
- * resolve to one of the user's own notes with the same name.
+ * Coarse on purpose (Paul, 2026-10-31): the brain should know WHAT he is
+ * learning and in which context (course folder), not every proposition.
+ * The knowledge graph itself stays in LearnHarness.
+ *
+ * Layout: into `wiki/learnharness/` when the brain has a `wiki/` folder (so
+ * the VM mirror, Hermes and the Morning Dashboard see it), else into
+ * `LearnHarness/`:
+ *   lernstand.md               topics, context, learning time, last active
+ *   learnharness-stats.json    the same for the Morning Dashboard
+ * Documents to learn from come IN through `LearnHarness/Eingang/`.
  *
  * Learning time = the gaps between consecutive recorded actions of a
  * session (message timestamps and answer times); a gap longer than
  * IDLE_GAP_MS is a pause and does not count.
  */
 import type { ChatRecord } from "./contracts/chat.ts";
-import type { GraphChain, GraphNode, NotesSource } from "./contracts/graph.ts";
 import type { DerivedGraph } from "./graph.ts";
+import type { SourceOrganization } from "./source-organization.ts";
 
+/** Export folder inside a brain that has a `wiki/` (Paul's layout). */
+export const BRAIN_WIKI_EXPORT_DIR = "wiki/learnharness";
+/** Export folder inside any other Markdown folder. */
 export const BRAIN_EXPORT_DIR = "LearnHarness";
-export const BRAIN_SESSIONS_DIR = "Sessions";
-export const BRAIN_PROPOSITIONS_DIR = "Aussagen";
+/** Drop folder: documents placed here are imported into the graph. */
+export const BRAIN_INBOX_DIR = "LearnHarness/Eingang";
+/** Imported inbox files move here (inside the inbox). */
+export const BRAIN_INBOX_DONE_DIR = "importiert";
+export const BRAIN_OVERVIEW_FILE = "lernstand.md";
 export const BRAIN_STATS_FILE = "learnharness-stats.json";
 /** Pauses longer than this between two actions are not learning time. */
 export const IDLE_GAP_MS = 10 * 60 * 1000;
-/** Prefix of the provenance label for notes the brain auto-import read. */
+/** Prefix of the provenance label for documents the inbox import read. */
 export const BRAIN_SOURCE_PREFIX = "Second Brain/";
+/** "Gerade dran" = learning time within this many days before the export. */
+export const RECENT_DAYS = 14;
+/** How many older topics the overview still lists. */
+const MAX_OLDER_TOPICS = 30;
 /** Below this self-reported confidence a correct answer still counts as unsure. */
 const LOW_CONFIDENCE = 50;
 
@@ -190,40 +204,97 @@ export function digestSession(record: ChatRecord, idleGapMs = IDLE_GAP_MS): Sess
 	};
 }
 
-// ─── File naming ─────────────────────────────────────────────────────────────
 
-/** A filename-safe, Obsidian-link-safe version of a title (no extension). */
-export function safeFileName(raw: string, fallback = "Unbenannt"): string {
-	const cleaned = raw
-		.replace(/[\\/:*?"<>|#^[\]]/g, " ")
-		.replace(/[\u0000-\u001f\u007f]/g, " ")
-		.replace(/\s+/g, " ")
-		.trim()
-		.replace(/^\.+/, "")
-		.slice(0, 120)
-		.trim();
-	return cleaned || fallback;
-}
-
-/** Assign unique names in a stable order: later duplicates get " (2)", " (3)"… */
-function uniqueNames<T>(items: readonly T[], base: (item: T) => string): Map<T, string> {
-	const used = new Map<string, number>();
-	const out = new Map<T, string>();
-	for (const item of items) {
-		const name = base(item);
-		const key = name.toLowerCase();
-		const n = (used.get(key) ?? 0) + 1;
-		used.set(key, n);
-		out.set(item, n === 1 ? name : `${name} (${n})`);
-	}
-	return out;
-}
+// ─── Topics ──────────────────────────────────────────────────────────────────
 
 const MINUTE = 60_000;
 const minutes = (ms: number) => Math.round(ms / MINUTE);
 
-function yamlString(value: string): string {
-	return JSON.stringify(value);
+/** Folder path of a session in the source tree ("FODS / Woche 5"), or null. */
+export function sessionContext(organization: SourceOrganization | undefined, chatId: string): string | null {
+	if (!organization) return null;
+	const names: string[] = [];
+	const seen = new Set<string>();
+	let folderId = organization.placements[chatId]?.folderId ?? null;
+	while (folderId && !seen.has(folderId)) {
+		seen.add(folderId);
+		const folder = organization.folders.find((f) => f.id === folderId);
+		if (!folder) break;
+		names.unshift(folder.name);
+		folderId = folder.parentId;
+	}
+	return names.length ? names.join(" / ") : null;
+}
+
+export interface TopicSummary {
+	title: string;
+	/** Folder path in LearnHarness' source tree, or null when at the root. */
+	context: string | null;
+	/** Last local day with learning time (or the session's update day). */
+	lastActive: string;
+	learningMinutesRecent: number;
+	learningMinutesTotal: number;
+	sessions: number;
+	kinds: Array<"teach" | "practice">;
+	/** Answers marked don't-know, wrong, or right-but-unsure. Counts only. */
+	openQuestions: number;
+}
+
+const topicKey = (title: string) => title.trim().toLowerCase().replace(/\s+/g, " ");
+
+/** Sessions with the same title (a lesson and its practice) form one topic. */
+export function summarizeTopics(
+	chats: readonly ChatRecord[],
+	organization: SourceOrganization | undefined,
+	now: Date,
+	idleGapMs = IDLE_GAP_MS,
+): TopicSummary[] {
+	const since = localDay(now.getTime() - RECENT_DAYS * 24 * 60 * MINUTE);
+	const groups = new Map<string, { latest: ChatRecord; summary: TopicSummary; recentMs: number; totalMs: number }>();
+	const sorted = [...chats].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id));
+	for (const chat of sorted) {
+		const d = digestSession(chat, idleGapMs);
+		const days = [...d.learningByDay.keys()].sort();
+		const lastActive = days.at(-1) ?? localDay(Date.parse(chat.updatedAt) || 0);
+		let recentMs = 0;
+		for (const [day, ms] of d.learningByDay) if (day >= since) recentMs += ms;
+		const key = topicKey(chat.title);
+		const group = groups.get(key);
+		if (!group) {
+			groups.set(key, {
+				latest: chat,
+				recentMs,
+				totalMs: d.learningMs,
+				summary: {
+					title: chat.title.trim() || "Ohne Titel",
+					context: sessionContext(organization, chat.id),
+					lastActive,
+					learningMinutesRecent: 0,
+					learningMinutesTotal: 0,
+					sessions: 1,
+					kinds: [d.kind],
+					openQuestions: d.unsure.length,
+				},
+			});
+			continue;
+		}
+		// Later sessions win the title and context; totals add up.
+		group.latest = chat;
+		group.recentMs += recentMs;
+		group.totalMs += d.learningMs;
+		const s = group.summary;
+		s.title = chat.title.trim() || s.title;
+		s.context = sessionContext(organization, chat.id) ?? s.context;
+		if (lastActive > s.lastActive) s.lastActive = lastActive;
+		s.sessions++;
+		if (!s.kinds.includes(d.kind)) s.kinds = [...s.kinds, d.kind].sort();
+		s.openQuestions += d.unsure.length;
+	}
+	return [...groups.values()]
+		.map((g) => ({ ...g.summary, learningMinutesRecent: minutes(g.recentMs), learningMinutesTotal: minutes(g.totalMs) }))
+		.sort((a, b) => b.lastActive.localeCompare(a.lastActive)
+			|| b.learningMinutesRecent - a.learningMinutesRecent
+			|| a.title.localeCompare(b.title));
 }
 
 // ─── The export ──────────────────────────────────────────────────────────────
@@ -231,25 +302,27 @@ function yamlString(value: string): string {
 export interface BrainExportInput {
 	chats: readonly ChatRecord[];
 	graph: DerivedGraph;
-	sources: readonly NotesSource[];
-	/** ISO time stamped into the stats document. */
+	organization?: SourceOrganization;
+	/** ISO time of the export; "recent" and the overview's date derive from it. */
 	now: string;
 	idleGapMs?: number;
 }
 
 export interface BrainExport {
-	/** Paths RELATIVE TO THE BRAIN FOLDER (always under LearnHarness/) → content. */
+	/** File name (inside the export folder) → content. */
 	files: Map<string, string>;
 	stats: BrainStats;
 }
 
 export interface BrainStats {
-	version: 1;
+	version: 2;
 	generatedAt: string;
 	idleGapMinutes: number;
+	recentDays: number;
 	totals: {
 		sessions: number;
 		learningMinutes: number;
+		learningMinutesRecent: number;
 		questions: number;
 		graded: number;
 		correct: number;
@@ -258,11 +331,14 @@ export interface BrainStats {
 	};
 	/** Ascending by date; only days with learning time. */
 	days: Array<{ date: string; learningMinutes: number; sessions: number }>;
+	/** Most recently active first — what the dashboard shows as current topics. */
+	topics: TopicSummary[];
 	/** Newest first. */
 	sessions: Array<{
 		id: string;
 		title: string;
 		kind: "teach" | "practice";
+		context: string | null;
 		createdAt: string;
 		updatedAt: string;
 		learningMinutes: number;
@@ -270,95 +346,82 @@ export interface BrainStats {
 		graded: number;
 		correct: number;
 		practice: Record<PracticeOutcome, number>;
-		propositions: number;
-		/** The session's note, relative to the brain folder. */
-		note: string;
 	}>;
 }
 
-const REASON_LABEL: Record<UnsureReason, string> = {
-	dontKnow: "Weiß nicht",
-	incorrect: "Falsch beantwortet",
-	lowConfidence: "Richtig, aber unsicher",
-};
+/** "1 h 05 min" / "40 min" — the Daily style. */
+export function formatMinutes(total: number): string {
+	if (total < 60) return `${total} min`;
+	const h = Math.floor(total / 60);
+	const m = total % 60;
+	return m ? `${h} h ${String(m).padStart(2, "0")} min` : `${h} h`;
+}
 
-const OUTCOME_LABEL: Record<PracticeOutcome, string> = {
-	solved: "Gelöst",
-	solvedWithHints: "Mit Hinweisen gelöst",
-	movedOn: "Weitergegangen",
-	surrendered: "Aufgegeben",
-};
+function localStamp(iso: string): string {
+	const d = new Date(iso);
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${localDay(d.getTime())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
-function oneLine(text: string, max = 300): string {
-	const flat = text.replace(/\s+/g, " ").trim();
-	return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+const cell = (text: string) => text.replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+
+function overviewMarkdown(stats: BrainStats): string {
+	const stand = localStamp(stats.generatedAt);
+	const recent = stats.topics.filter((t) => t.learningMinutesRecent > 0);
+	const older = stats.topics.filter((t) => t.learningMinutesRecent === 0).slice(0, MAX_OLDER_TOPICS);
+	const kindLabel = (t: TopicSummary) => t.kinds.map((k) => (k === "practice" ? "Üben" : "Lernen")).join(", ");
+	const lines = [
+		"# Lernstand (LearnHarness)",
+		"",
+		"Woran Paul in LearnHarness gerade lernt, grob zusammengefasst: Themen, Rahmen und Lernzeit — nicht die einzelnen Inhalte.",
+		"",
+		"> Diese Seite schreibt LearnHarness automatisch und überschreibt sie bei jeder Änderung. Nicht von Hand bearbeiten; Ergänzungen gehören auf die passende Fachseite.",
+		"",
+		`**Stand:** ${stand} · **Lernzeit der letzten ${stats.recentDays} Tage:** ${formatMinutes(stats.totals.learningMinutesRecent)} · **insgesamt:** ${formatMinutes(stats.totals.learningMinutes)} in ${stats.totals.sessions} Sessions`,
+		"",
+		`## Gerade dran (letzte ${stats.recentDays} Tage)`,
+		"",
+	];
+	if (recent.length) {
+		lines.push("| Thema | Rahmen | Lernzeit | Zuletzt | Art | Offene Fragen |", "|---|---|---|---|---|---|");
+		for (const t of recent) {
+			lines.push(`| ${cell(t.title)} | ${cell(t.context ?? "—")} | ${formatMinutes(t.learningMinutesRecent)} | ${t.lastActive} | ${kindLabel(t)} | ${t.openQuestions} |`);
+		}
+	} else {
+		lines.push(`In den letzten ${stats.recentDays} Tagen keine Lernzeit in LearnHarness.`);
+	}
+	if (older.length) {
+		lines.push("", "## Früher gelernt", "");
+		for (const t of older) {
+			const ctx = t.context ? ` (${t.context})` : "";
+			lines.push(`- ${cell(t.title)}${ctx} — zuletzt ${t.lastActive}, insgesamt ${formatMinutes(t.learningMinutesTotal)}`);
+		}
+	}
+	lines.push(
+		"",
+		"## So hängt das zusammen",
+		"",
+		"- **Rahmen** ist der Ordner, in dem die Session in LearnHarness liegt (z. B. ein Fach).",
+		"- **Offene Fragen** zählt Antworten mit „Weiß nicht“, falschen oder unsicheren Antworten — nur die Anzahl.",
+		"- Dokumente zum Lernen kommen über den Ordner `LearnHarness/Eingang/` im Brain in LearnHarness hinein.",
+		"",
+		"## Quellen",
+		"",
+		`- LearnHarness auf Pauls Mac (Sessions, Wissensgraph, Ordner), automatisch exportiert (Stand: ${stand}).`,
+	);
+	return `${lines.join("\n")}\n`;
 }
 
 export function buildBrainExport(input: BrainExportInput): BrainExport {
 	const idleGapMs = input.idleGapMs ?? IDLE_GAP_MS;
-	const files = new Map<string, string>();
-	const nodesById = new Map(input.graph.nodes.map((n) => [n.id, n]));
-
-	// Stable orders → stable, collision-free names across runs.
+	const now = new Date(input.now);
+	const since = localDay(now.getTime() - RECENT_DAYS * 24 * 60 * MINUTE);
 	const chats = [...input.chats].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-	const nodes = [...input.graph.nodes].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-	const sessionName = uniqueNames(chats, (c) => `${c.createdAt.slice(0, 10)} ${safeFileName(c.title)}`);
-	const nodeName = uniqueNames(nodes, (n) => safeFileName(n.name, n.id));
-	const chatById = new Map(chats.map((c) => [c.id, c]));
-	const sourceById = new Map(input.sources.map((s) => [s.id, s]));
 
-	const sessionPath = (c: ChatRecord) => `${BRAIN_EXPORT_DIR}/${BRAIN_SESSIONS_DIR}/${sessionName.get(c)}`;
-	const nodePath = (n: GraphNode) => `${BRAIN_EXPORT_DIR}/${BRAIN_PROPOSITIONS_DIR}/${nodeName.get(n)}`;
-	const nodeLink = (id: string) => {
-		const n = nodesById.get(id);
-		return n ? `[[${nodePath(n)}|${n.name.replace(/[|\]]/g, " ")}]]` : "(entfernt)";
-	};
-	const sessionLink = (c: ChatRecord) => `[[${sessionPath(c)}|${c.title.replace(/[|\]]/g, " ")}]]`;
-	const chainLine = (ch: GraphChain) => `${ch.premises.map(nodeLink).join(" + ")} ⇒ ${nodeLink(ch.conclusion)}`;
-	const sourceLine = (sourceId: string): string | null => {
-		const s = sourceById.get(sourceId);
-		if (!s) return null;
-		if (s.filePath.startsWith(BRAIN_SOURCE_PREFIX)) {
-			const rel = s.filePath.slice(BRAIN_SOURCE_PREFIX.length).replace(/\.md$/i, "");
-			return `Notiz: [[${rel}]]`;
-		}
-		return `Importierte Notiz: \`${s.filePath}\``;
-	};
-
-	const chatsOf = (prov: readonly { chatId: string }[]) => [...new Set(prov.map((p) => p.chatId))];
-
-	// Proposition notes.
-	for (const n of nodes) {
-		const premiseOf = input.graph.chains.filter((ch) => ch.premises.includes(n.id));
-		const concludedBy = input.graph.chains.filter((ch) => ch.conclusion === n.id);
-		const lines: string[] = [
-			"---",
-			`learnharness_id: ${n.id}`,
-			`created: ${n.createdAt}`,
-			"tags: [learnharness/aussage]",
-			"---",
-			`# ${n.name}`,
-			"",
-			n.statement,
-		];
-		const aliases = [...new Set(n.aliases.filter((a) => a && a !== n.statement))];
-		if (aliases.length) lines.push("", "## Andere Formulierungen", ...aliases.map((a) => `- ${oneLine(a)}`));
-		if (concludedBy.length) lines.push("", "## Begründet durch", ...concludedBy.map((ch) => `- ${chainLine(ch)}`));
-		if (premiseOf.length) lines.push("", "## Führt zu", ...premiseOf.map((ch) => `- ${chainLine(ch)}`));
-		const occurrences = chatsOf(n.provenance)
-			.map((id) => {
-				const chat = chatById.get(id);
-				return chat ? `Session: ${sessionLink(chat)}` : sourceLine(id);
-			})
-			.filter((l): l is string => !!l);
-		if (occurrences.length) lines.push("", "## Vorkommen", ...occurrences.map((o) => `- ${o}`));
-		files.set(`${nodePath(n)}.md`, `${lines.join("\n")}\n`);
-	}
-
-	// Session notes + stats rows.
 	const dayTotals = new Map<string, { ms: number; sessions: Set<string> }>();
-	const statRows: BrainStats["sessions"] = [];
+	const sessionRows: BrainStats["sessions"] = [];
 	let totalMs = 0;
+	let recentMs = 0;
 	let totalQuestions = 0;
 	let totalGraded = 0;
 	let totalCorrect = 0;
@@ -369,18 +432,17 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 		totalGraded += d.graded;
 		totalCorrect += d.correct;
 		for (const [day, ms] of d.learningByDay) {
+			if (day >= since) recentMs += ms;
 			const t = dayTotals.get(day) ?? { ms: 0, sessions: new Set<string>() };
 			t.ms += ms;
 			t.sessions.add(chat.id);
 			dayTotals.set(day, t);
 		}
-		const sessionNodes = nodes.filter((n) => n.provenance.some((p) => p.chatId === chat.id));
-		const sessionChains = input.graph.chains.filter((ch) => ch.provenance.some((p) => p.chatId === chat.id));
-		const path = sessionPath(chat);
-		statRows.push({
+		sessionRows.push({
 			id: chat.id,
 			title: chat.title,
 			kind: d.kind,
+			context: sessionContext(input.organization, chat.id),
 			createdAt: chat.createdAt,
 			updatedAt: chat.updatedAt,
 			learningMinutes: minutes(d.learningMs),
@@ -388,50 +450,18 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 			graded: d.graded,
 			correct: d.correct,
 			practice: d.practice,
-			propositions: sessionNodes.length,
-			note: `${path}.md`,
 		});
-
-		const lines: string[] = [
-			"---",
-			`learnharness_session: ${chat.id}`,
-			`title: ${yamlString(chat.title)}`,
-			`type: ${d.kind === "practice" ? "üben" : "lernen"}`,
-			`date: ${chat.createdAt.slice(0, 10)}`,
-			`lernzeit_minuten: ${minutes(d.learningMs)}`,
-			"tags: [learnharness/session]",
-			"---",
-			`# ${chat.title}`,
-			"",
-			`**Datum:** ${chat.createdAt.slice(0, 10)} · **Lernzeit:** ${minutes(d.learningMs)} Min. · **Art:** ${d.kind === "practice" ? "Üben" : "Lernen"}`,
-		];
-		if (d.questions) {
-			const gradedPart = d.graded ? `, davon ${d.correct} von ${d.graded} bewerteten richtig` : "";
-			lines.push("", `**Fragen beantwortet:** ${d.questions}${gradedPart}`);
-		}
-		if (sessionNodes.length) {
-			lines.push("", "## Gelernte Aussagen", ...sessionNodes.map((n) => `- ${nodeLink(n.id)}: ${oneLine(n.statement, 200)}`));
-		}
-		if (sessionChains.length) lines.push("", "## Begründungsketten", ...sessionChains.map((ch) => `- ${chainLine(ch)}`));
-		if (d.unsure.length) {
-			lines.push("", "## Unsicher oder offen", ...d.unsure.map((u) => {
-				const conf = u.confidence !== undefined ? ` (${Math.round(u.confidence)} % sicher)` : "";
-				return `- ${REASON_LABEL[u.reason]}${conf}: ${oneLine(u.question)}`;
-			}));
-		}
-		if (d.learnerQuestions.length) lines.push("", "## Deine Fragen", ...d.learnerQuestions.map((q) => `- ${oneLine(q)}`));
-		const practiced = PRACTICE_OUTCOMES.filter((o) => d.practice[o] > 0);
-		if (practiced.length) lines.push("", "## Übungsergebnisse", ...practiced.map((o) => `- ${OUTCOME_LABEL[o]}: ${d.practice[o]}`));
-		files.set(`${path}.md`, `${lines.join("\n")}\n`);
 	}
 
 	const stats: BrainStats = {
-		version: 1,
+		version: 2,
 		generatedAt: input.now,
 		idleGapMinutes: minutes(idleGapMs),
+		recentDays: RECENT_DAYS,
 		totals: {
 			sessions: chats.length,
 			learningMinutes: minutes(totalMs),
+			learningMinutesRecent: minutes(recentMs),
 			questions: totalQuestions,
 			graded: totalGraded,
 			correct: totalCorrect,
@@ -441,20 +471,23 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 		days: [...dayTotals.entries()]
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([date, t]) => ({ date, learningMinutes: minutes(t.ms), sessions: t.sessions.size })),
-		sessions: statRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
+		topics: summarizeTopics(chats, input.organization, now, idleGapMs),
+		sessions: sessionRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
 	};
-	files.set(`${BRAIN_EXPORT_DIR}/${BRAIN_STATS_FILE}`, `${JSON.stringify(stats, null, "\t")}\n`);
+	const files = new Map<string, string>([
+		[BRAIN_OVERVIEW_FILE, overviewMarkdown(stats)],
+		[BRAIN_STATS_FILE, `${JSON.stringify(stats, null, "\t")}\n`],
+	]);
 	return { files, stats };
 }
 
-// ─── Import scan decisions (pure) ────────────────────────────────────────────
+// ─── Inbox scan decisions (pure) ─────────────────────────────────────────────
 
-/** Whether a brain-relative path (POSIX separators) takes part in the auto-import:
- *  Markdown only, never LearnHarness' own export folder, never hidden folders
- *  or files (.obsidian, .trash, .git, …). */
-export function brainImportCandidate(relPath: string): boolean {
+/** Whether an inbox-relative path (POSIX separators) is a document to import:
+ *  Markdown, text or PDF; never hidden files/folders or already imported ones. */
+export function inboxImportCandidate(relPath: string): boolean {
 	const parts = relPath.split("/");
 	if (parts.some((p) => p === "" || p === "." || p === ".." || p.startsWith("."))) return false;
-	if (parts[0] === BRAIN_EXPORT_DIR) return false;
-	return /\.md$/i.test(relPath);
+	if (parts[0] === BRAIN_INBOX_DONE_DIR) return false;
+	return /\.(?:md|markdown|txt|pdf)$/i.test(relPath);
 }

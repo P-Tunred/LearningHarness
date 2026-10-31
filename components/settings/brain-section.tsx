@@ -14,6 +14,7 @@ interface BrainStatusView {
 	error?: string;
 	lastExportAt?: string;
 	exportedFiles?: number;
+	exportDir?: string;
 	conflicts?: string[];
 	import?: { total: number; done: number; failed: number; current?: string; finishedAt?: string };
 }
@@ -32,14 +33,14 @@ export function brainPhaseLine(s: BrainStatusView | null): string {
 			return "Aus: Trage einen Ordner ein, um dein Second Brain zu verbinden.";
 		case "importing": {
 			const i = s.import;
-			return i ? `Lese Notizen ein: ${i.done} von ${i.total}${i.current ? ` (${i.current})` : ""}` : "Lese Notizen ein…";
+			return i ? `Lese den Eingang ein: ${i.done} von ${i.total}${i.current ? ` (${i.current})` : ""}` : "Lese den Eingang ein…";
 		}
 		case "exporting":
-			return "Schreibe Lern-Notizen ins Brain…";
+			return "Schreibe den Lernstand ins Brain…";
 		case "error":
 			return `Fehler: ${s.error ?? "unbekannt"}`;
 		case "idle":
-			return `Verbunden. Letzter Export: ${time(s.lastExportAt)} (${s.exportedFiles ?? 0} Dateien)`;
+			return `Verbunden. Lernstand geschrieben: ${time(s.lastExportAt)}${s.exportDir ? ` nach „${s.exportDir}/“` : ""}`;
 	}
 }
 
@@ -68,7 +69,7 @@ export function BrainSection({
 	}, []);
 
 	const lastImport = status?.import?.finishedAt
-		? `${time(status.import.finishedAt)}: ${status.import.total} neu/geändert${status.import.failed ? `, ${status.import.failed} fehlgeschlagen` : ""}`
+		? `${time(status.import.finishedAt)}: ${status.import.total} Dokumente${status.import.failed ? `, ${status.import.failed} fehlgeschlagen` : ""}`
 		: "–";
 
 	return (
@@ -99,7 +100,7 @@ export function BrainSection({
 					{brainPhaseLine(status)}
 				</span>
 			</SettingsRow>
-			<SettingsRow label="Letzter Import" testid="row-brain-import">
+			<SettingsRow label="Letzter Eingang" testid="row-brain-import">
 				<span className="font-ui text-xs text-muted-foreground">{lastImport}</span>
 			</SettingsRow>
 			{status?.conflicts && status.conflicts.length > 0 && (
@@ -108,10 +109,11 @@ export function BrainSection({
 				</SettingsRow>
 			)}
 			<p className="mt-3 font-ui text-xs text-muted-foreground">
-				LearnHarness schreibt deine Sessions und Aussagen nach „LearnHarness/“ in diesem Ordner
-				(plus learnharness-stats.json fürs Dashboard) und liest beim App-Start neue oder geänderte
-				Notizen ein. Der Ordner „LearnHarness/“ und versteckte Ordner werden nicht eingelesen.
-				Jede eingelesene Notiz kostet KI-Anfragen.
+				Ins Brain geht nur ein grober Lernstand: Themen, Ordner und Lernzeit in „wiki/learnharness/“
+				(ohne wiki/-Ordner: „LearnHarness/“), plus learnharness-stats.json fürs Dashboard. Dein Brain
+				wird nicht in den Wissensgraphen kopiert; der Lern-Agent schlägt dort bei Bedarf nur nach.
+				Dokumente zum Lernen legst du (oder Hermes, Claude) in „LearnHarness/Eingang/“: Beim App-Start
+				kommen sie in den Graphen und wandern nach „Eingang/importiert/“. Das kostet KI-Anfragen.
 			</p>
 		</>
 	);

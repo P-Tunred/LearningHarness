@@ -35,34 +35,42 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
 
 **Settings → Second Brain → Brain-Ordner**: Pfad zu deinem Ordner mit
 Markdown-Notizen (z. B. Google Drive für Desktop:
-`~/Library/CloudStorage/GoogleDrive-…/Meine Ablage/<Brain>`). Leer = aus.
+`~/Library/CloudStorage/GoogleDrive-…/My Drive/KI/Second Brain`). Leer = aus.
 
-- **Export (LearnHarness → Brain)**, automatisch beim App-Start und nach jeder
-  Session/Graph-Änderung, in den Unterordner `LearnHarness/`:
-  - `Sessions/<Datum> <Titel>.md`: Datum, Lernzeit, gelernte Aussagen,
-    Begründungsketten, „Unsicher oder offen“ (Weiß nicht / falsch / unsicher),
-    deine Fragen, Übungsergebnisse
-  - `Aussagen/<Name>.md`: Aussage, andere Formulierungen, „Begründet durch“,
-    „Führt zu“, Vorkommen (Sessions bzw. deine Original-Notiz)
-  - Links sind `[[LearnHarness/Aussagen/…|Name]]`, also mit vollem Pfad. So
-    landen sie nie bei einer gleichnamigen eigenen Notiz.
+Grundsatz (Paul, 2026-10-31): Der Wissensgraph enthält, was du **lernst** —
+nicht dein ganzes Brain. Und das Brain bekommt nur einen **groben** Lernstand,
+nicht jede Aussage.
+
+- **Lernstand (LearnHarness → Brain)**, automatisch beim App-Start und nach
+  jeder Session/Graph-Änderung, nach `wiki/learnharness/` (Brain ohne `wiki/`:
+  `LearnHarness/`). Unter `wiki/` sehen es auch die VM-Spiegelung, Hermes und
+  das Morning Dashboard.
+  - `lernstand.md`: Themen der letzten 14 Tage (Thema, Rahmen = Ordner in
+    LearnHarness, Lernzeit, zuletzt, Anzahl offener Fragen), darunter früher
+    Gelerntes. Keine Fragen- oder Aussagentexte.
+  - `learnharness-stats.json` (Version 2) fürs Dashboard: Summen, Lernzeit pro
+    Tag, `topics` (zuletzt aktiv zuerst) und Sessions.
   - Überschrieben werden nur Dateien, die LearnHarness selbst geschrieben hat
-    (Liste in `LearnHarness/.learnharness-export.json`). Gelöscht wird eine
-    alte eigene Datei nur, wenn du sie nicht bearbeitet hast.
-- **Auto-Import (Brain → LearnHarness)** beim App-Start: alle `.md`-Notizen
-  außer `LearnHarness/` und versteckten Ordnern (`.obsidian`, `.trash`, …).
-  Beim ersten Mal alle, danach nur neue/geänderte. Gleiche Extraktion wie
-  der Import-Knopf (kostet KI-Anfragen). Fehlen Modelle/Keys, stoppt der
-  Import mit einer Meldung, statt weiterzulaufen. Der Stand liegt in
+    (Liste in `.learnharness-export.json` daneben). Gelöscht wird eine alte
+    eigene Datei nur, wenn du sie nicht bearbeitet hast.
+- **Nachschlagen (Brain → LearnHarness)**: Prober und Lehrer bekommen am Ende
+  des System-Prompts einen kurzen Abschnitt, wo das Brain liegt
+  (`index.md`, `start.md`, `themen/`, `konzepte/`). Sie lesen dort bei Bedarf
+  mit ihren nur lesenden Datei-Werkzeugen (`grep`, `read`). Nichts wird
+  kopiert oder in den Graphen übernommen.
+- **Eingang (Paul, Hermes, Claude → LearnHarness)**: Dokumente (`.md`, `.txt`,
+  `.pdf`) in `LearnHarness/Eingang/` im Brain gehen beim App-Start durch
+  denselben Import wie der Import-Knopf (kostet KI-Anfragen) und wandern danach
+  nach `Eingang/importiert/`. Fehlen Modelle/Keys, stoppt der Import mit einer
+  Meldung und versucht es beim nächsten Start erneut. Der Stand liegt in
   `brain-sync.json` im LearnHarness-Datenordner, nicht im Brain.
-- **Morning Dashboard**: `LearnHarness/learnharness-stats.json` mit
-  Lernzeit pro Tag, Sessions (Titel, Art, Lernzeit, Fragen/richtig,
-  Übungsergebnisse, Link zur Notiz) und Summen. **Lernzeit** = Zeit zwischen
-  deinen Aktionen in einer Session; Pausen über 10 Minuten zählen nicht.
-- Code: `src/core/brain-export.ts` (Notizen + Statistik, ohne Dateizugriff),
-  `src/server/brain.ts` (Dateien, Import, Ablauf), `app/api/brain/route.ts`,
-  `components/settings/brain-section.tsx`. Tests: `tests/brain-export.test.ts`,
-  `tests/brain-sync.test.ts`.
+- **Lernzeit** = Zeit zwischen deinen Aktionen in einer Session; Pausen über
+  10 Minuten zählen nicht.
+- Code: `src/core/brain-export.ts` (Lernstand + Statistik, ohne
+  Dateizugriff), `src/server/brain.ts` (Export, Eingang, Ablauf),
+  `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),
+  `app/api/brain/route.ts`, `components/settings/brain-section.tsx`. Tests:
+  `tests/brain-export.test.ts`, `tests/brain-sync.test.ts`.
 
 ### 4. Startsymbol für den Mac
 

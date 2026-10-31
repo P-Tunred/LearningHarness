@@ -1,6 +1,6 @@
 /**
  * Second Brain export (fork addition) — the pure half: learning time,
- * session digests, note/stat generation and import-candidate rules.
+ * session digests, the coarse overview + stats, and inbox rules.
  * Session data comes from the real golden fixtures (never hand-written).
  */
 import assert from "node:assert/strict";
@@ -9,21 +9,23 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-	BRAIN_SOURCE_PREFIX,
 	IDLE_GAP_MS,
-	brainImportCandidate,
 	buildBrainExport,
 	digestSession,
+	formatMinutes,
+	inboxImportCandidate,
 	learningTimeByDay,
 	localDay,
-	safeFileName,
+	sessionContext,
+	summarizeTopics,
 } from "../src/core/brain-export.ts";
 import type { ChatRecord } from "../src/core/contracts/chat.ts";
-import type { GraphChain, GraphNode } from "../src/core/contracts/graph.ts";
+import type { SourceOrganization } from "../src/core/source-organization.ts";
 
 const GOLDEN = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "golden-data");
 const goldenChat = (id: string) => JSON.parse(fs.readFileSync(path.join(GOLDEN, "chats", `${id}.json`), "utf-8")) as ChatRecord;
 const TEACH = goldenChat("chat_mv27rrra_feff23b6");
+const OTHER = goldenChat("chat_mv293wv5_10656952");
 
 const MIN = 60_000;
 
@@ -68,85 +70,90 @@ describe("digestSession (golden teach session)", () => {
 	});
 });
 
-describe("safeFileName and import candidates", () => {
-	it("strips path and link characters, keeps readable text", () => {
-		assert.equal(safeFileName("BKT: p(L|obs) / [update]?"), "BKT p(L obs) update");
-		assert.equal(safeFileName("..."), "Unbenannt");
-		assert.equal(safeFileName("  "), "Unbenannt");
+describe("inbox candidates and formatting", () => {
+	it("imports Markdown, text and PDF; never hidden or already imported files", () => {
+		assert.equal(inboxImportCandidate("Skript Kapitel 5.pdf"), true);
+		assert.equal(inboxImportCandidate("FODS/Notiz.MD"), true);
+		assert.equal(inboxImportCandidate("hinweis.txt"), true);
+		assert.equal(inboxImportCandidate("importiert/alt.md"), false);
+		assert.equal(inboxImportCandidate(".DS_Store"), false);
+		assert.equal(inboxImportCandidate("FODS/.trash/x.md"), false);
+		assert.equal(inboxImportCandidate("bild.png"), false);
+		assert.equal(inboxImportCandidate("../x.md"), false);
 	});
 
-	it("imports Markdown only, never the export folder or hidden folders", () => {
-		assert.equal(brainImportCandidate("Uni/Kostenrechnung.md"), true);
-		assert.equal(brainImportCandidate("Notiz.MD"), true);
-		assert.equal(brainImportCandidate("LearnHarness/Sessions/x.md"), false);
-		assert.equal(brainImportCandidate(".obsidian/workspace.md"), false);
-		assert.equal(brainImportCandidate("Uni/.trash/x.md"), false);
-		assert.equal(brainImportCandidate("Uni/bild.png"), false);
-		assert.equal(brainImportCandidate("Uni/../x.md"), false);
+	it("formats minutes in the Daily style", () => {
+		assert.equal(formatMinutes(0), "0 min");
+		assert.equal(formatMinutes(45), "45 min");
+		assert.equal(formatMinutes(60), "1 h");
+		assert.equal(formatMinutes(65), "1 h 05 min");
+	});
+});
+
+describe("topics and context", () => {
+	const organization: SourceOrganization = {
+		version: 1,
+		folders: [
+			{ id: "f_uni", name: "FODS", parentId: null, createdAt: "2026-10-01T00:00:00.000Z" },
+			{ id: "f_w5", name: "Woche 5", parentId: "f_uni", createdAt: "2026-10-01T00:00:00.000Z" },
+		],
+		placements: { [TEACH.id]: { folderId: "f_w5" } },
+	};
+
+	it("names a session's context by its folder path", () => {
+		assert.equal(sessionContext(organization, TEACH.id), "FODS / Woche 5");
+		assert.equal(sessionContext(organization, OTHER.id), null, "root sessions have no context");
+		assert.equal(sessionContext(undefined, TEACH.id), null);
+	});
+
+	it("groups same-titled sessions into one topic and sums their time", () => {
+		const twin = { ...OTHER, title: ` ${TEACH.title.toUpperCase()} ` } as ChatRecord;
+		const topics = summarizeTopics([TEACH, twin], organization, new Date("2027-01-01T00:00:00Z"));
+		assert.equal(topics.length, 1);
+		const [t] = topics;
+		assert.equal(t!.sessions, 2);
+		const total = Math.round((digestSession(TEACH).learningMs + digestSession(twin).learningMs) / MIN);
+		assert.ok(Math.abs(t!.learningMinutesTotal - total) <= 1);
+		assert.equal(t!.learningMinutesRecent, 0, "nothing within 14 days of 2027-01-01");
 	});
 });
 
 describe("buildBrainExport", () => {
-	const node = (id: string, name: string, chatId: string, createdAt: string): GraphNode => ({
-		id, name, statement: `${name} statement.`, aliases: [], createdAt, provenance: [{ chatId, messageId: "" }],
-	});
-	const a = node("n_a", "Fixkosten", TEACH.id, "2026-10-10T10:00:00.000Z");
-	const b = node("n_b", "Variable Kosten", TEACH.id, "2026-10-10T10:01:00.000Z");
-	const c = node("n_c", "Fixkosten", "src_note", "2026-10-10T10:02:00.000Z"); // same name → (2)
-	const chain: GraphChain = { id: "arg_1", premises: ["n_a", "n_b"], conclusion: "n_c", provenance: [{ chatId: TEACH.id, messageId: "" }], createdAt: "2026-10-10T10:03:00.000Z" };
-	const out = buildBrainExport({
-		chats: [TEACH],
-		graph: { nodes: [c, b, a], chains: [chain] },
-		sources: [{ id: "src_note", filePath: `${BRAIN_SOURCE_PREFIX}Uni/Kosten.md`, importedAt: "2026-10-10T10:00:00.000Z" }],
-		now: "2026-10-31T08:00:00.000Z",
-	});
-	const sessionFile = [...out.files.keys()].find((k) => k.startsWith("LearnHarness/Sessions/"))!;
+	const graph = { nodes: [], chains: [] };
+	const lastAction = Math.max(...[TEACH, OTHER].flatMap((c) => c.messages.map((m) => (m as { timestamp?: number }).timestamp ?? 0)));
+	const now = new Date(lastAction + 60 * MIN).toISOString();
+	const out = buildBrainExport({ chats: [TEACH, OTHER], graph, now });
 
-	it("writes one note per session and per proposition, all under LearnHarness/", () => {
-		assert.ok([...out.files.keys()].every((k) => k.startsWith("LearnHarness/")));
-		assert.ok(out.files.has("LearnHarness/Aussagen/Fixkosten.md"));
-		assert.ok(out.files.has("LearnHarness/Aussagen/Fixkosten (2).md"), "name collisions get a stable suffix");
-		assert.ok(out.files.has("LearnHarness/Aussagen/Variable Kosten.md"));
-		assert.ok(sessionFile.startsWith(`LearnHarness/Sessions/${TEACH.createdAt.slice(0, 10)} `));
-		assert.ok(out.files.has("LearnHarness/learnharness-stats.json"));
+	it("writes only the coarse overview and the stats — no per-proposition notes", () => {
+		assert.deepEqual([...out.files.keys()].sort(), ["learnharness-stats.json", "lernstand.md"]);
 	});
 
-	it("links with full paths: chains, sessions and brain notes", () => {
-		const conclusion = out.files.get("LearnHarness/Aussagen/Fixkosten (2).md")!;
-		assert.match(conclusion, /## Begründet durch\n- \[\[LearnHarness\/Aussagen\/Fixkosten\|Fixkosten\]\] \+ \[\[LearnHarness\/Aussagen\/Variable Kosten\|Variable Kosten\]\] ⇒/);
-		assert.match(conclusion, /Notiz: \[\[Uni\/Kosten\]\]/, "a brain-imported source links back to the user's note");
-		const premise = out.files.get("LearnHarness/Aussagen/Fixkosten.md")!;
-		assert.match(premise, /## Führt zu/);
-		assert.match(premise, /Session: \[\[LearnHarness\/Sessions\//);
-		const session = out.files.get(sessionFile)!;
-		assert.match(session, /## Gelernte Aussagen\n- \[\[LearnHarness\/Aussagen\/Fixkosten\|Fixkosten\]\]/);
-		assert.match(session, /## Unsicher oder offen\n- /);
-		assert.match(session, /^---\nlearnharness_session: chat_mv27rrra_feff23b6\n/);
+	it("keeps the overview coarse: topics and minutes, never questions or statements", () => {
+		const md = out.files.get("lernstand.md")!;
+		assert.match(md, /^# Lernstand \(LearnHarness\)\n/);
+		assert.match(md, /## Gerade dran \(letzte 14 Tage\)\n\n\| Thema \| Rahmen/);
+		assert.match(md, /## Quellen\n/);
+		for (const u of digestSession(TEACH).unsure) assert.ok(!md.includes(u.question.slice(0, 40)), "no question text");
 	});
 
 	it("produces dashboard stats consistent with the digests", () => {
-		const stats = JSON.parse(out.files.get("LearnHarness/learnharness-stats.json")!);
-		const d = digestSession(TEACH);
-		assert.equal(stats.version, 1);
-		assert.equal(stats.generatedAt, "2026-10-31T08:00:00.000Z");
+		const stats = JSON.parse(out.files.get("learnharness-stats.json")!);
+		assert.equal(stats.version, 2);
+		assert.equal(stats.generatedAt, now);
 		assert.equal(stats.idleGapMinutes, 10);
-		assert.equal(stats.totals.sessions, 1);
-		assert.equal(stats.totals.propositions, 3);
-		assert.equal(stats.totals.chains, 1);
-		assert.equal(stats.totals.questions, d.questions);
-		assert.equal(stats.sessions[0].note, sessionFile);
-		assert.equal(stats.sessions[0].propositions, 2, "only nodes with this session's provenance");
+		assert.equal(stats.recentDays, 14);
+		assert.equal(stats.totals.sessions, 2);
+		assert.equal(stats.totals.questions, digestSession(TEACH).questions + digestSession(OTHER).questions);
+		assert.ok(stats.totals.learningMinutesRecent > 0, "the golden sessions are recent relative to now");
+		assert.ok(stats.topics.length >= 1 && stats.topics.length <= 2);
+		assert.ok(stats.topics.every((t: { lastActive: string }) => /^\d{4}-\d{2}-\d{2}$/.test(t.lastActive)));
+		assert.ok(!("note" in stats.sessions[0]), "no links to per-session notes any more");
 		const dayMinutes = stats.days.reduce((s: number, day: { learningMinutes: number }) => s + day.learningMinutes, 0);
 		assert.ok(Math.abs(dayMinutes - stats.totals.learningMinutes) <= stats.days.length, "per-day rounding only");
 	});
 
 	it("is deterministic for the same input", () => {
-		const again = buildBrainExport({
-			chats: [TEACH],
-			graph: { nodes: [a, b, c], chains: [chain] },
-			sources: [{ id: "src_note", filePath: `${BRAIN_SOURCE_PREFIX}Uni/Kosten.md`, importedAt: "2026-10-10T10:00:00.000Z" }],
-			now: "2026-10-31T08:00:00.000Z",
-		});
+		const again = buildBrainExport({ chats: [OTHER, TEACH], graph, now });
 		assert.deepEqual([...again.files.entries()].sort(), [...out.files.entries()].sort());
 	});
 });

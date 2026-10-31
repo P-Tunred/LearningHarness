@@ -1,36 +1,43 @@
 /**
  * Second Brain link (fork addition) — the IO half of src/core/brain-export.ts.
  *
- * - EXPORT: writes `<brain>/LearnHarness/…` (session notes, proposition
- *   notes, learnharness-stats.json). Runs after the start-up import and,
+ * - EXPORT: writes the coarse overview (lernstand.md) and the dashboard
+ *   stats into `<brain>/wiki/learnharness/` (or `<brain>/LearnHarness/` for
+ *   a brain without `wiki/`). Runs after the start-up inbox import and,
  *   debounced, whenever sessions or the graph change. Only files listed in
  *   its own manifest are ever overwritten or removed; a removal also needs
  *   the file to be unchanged since LearnHarness wrote it.
- * - IMPORT: once per app start, every .md note in the brain except the
- *   export folder and hidden folders goes through the SAME notes-import
- *   pipeline as the manual import — on the first run all of them, later
- *   only new or changed ones (content hash). Its bookkeeping lives in the
- *   LearnHarness data folder (brain-sync.json), never in the brain.
+ * - INBOX: documents (Markdown, text, PDF) that Paul, Hermes or Claude put
+ *   into `<brain>/LearnHarness/Eingang/` go through the SAME notes-import
+ *   pipeline as the manual import, then move to `Eingang/importiert/`. The
+ *   rest of the brain is NOT imported — the graph holds what he learns.
+ * - READ ACCESS: the teaching agents get a short prompt note saying where
+ *   the brain is (brainPromptNote); they read it with their read-only file
+ *   tools when a lesson needs context.
  *
  * Single-process coordination over files, like the rest of the app.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { PATHS } from "../../config.ts";
 import {
 	BRAIN_EXPORT_DIR,
+	BRAIN_INBOX_DIR,
+	BRAIN_INBOX_DONE_DIR,
 	BRAIN_SOURCE_PREFIX,
-	brainImportCandidate,
 	buildBrainExport,
+	inboxImportCandidate,
 } from "../core/brain-export.ts";
 import type { ChatRecord } from "../core/contracts/chat.ts";
 import { emit, subscribe } from "../core/events.ts";
 import { getGraph } from "../core/graph.ts";
-import { isBrainFolder, ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/settings.ts";
+import { ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/settings.ts";
 import { NotesImportError } from "../agent/subagents/extraction.ts";
 import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
+import { convertPdf } from "../agent/subagents/pdf-ops.ts";
+import { joinPages } from "../agent/subagents/pdf-markdown.ts";
+import { configuredBrainFolder, exportDirFor, usableFolder } from "./brain-folder.ts";
 import { extraction } from "./chat-handler.ts";
 import { sourceDirectory } from "./source-organization.ts";
 import { stores } from "./stores.ts";
@@ -47,6 +54,8 @@ export interface BrainStatus {
 	error?: string;
 	lastExportAt?: string;
 	exportedFiles?: number;
+	/** Brain-relative folder the overview and stats go to. */
+	exportDir?: string;
 	/** Exported paths skipped because a file LearnHarness did not create is there. */
 	conflicts?: string[];
 	import?: { total: number; done: number; failed: number; current?: string; finishedAt?: string };
@@ -77,24 +86,6 @@ function setStatus(patch: Partial<BrainStatus>): void {
 	// No event here: activity-changed is a graph-change trigger for the
 	// export below, so emitting it from our own status would loop.
 	rt.status = { ...rt.status, ...patch };
-}
-
-// ─── Folder resolution ───────────────────────────────────────────────────────
-
-/** The configured folder, "~/" expanded; null when unset or invalid. */
-export function configuredBrainFolder(): string | null {
-	const folder = stores.settingsStore.readSettings()?.brain?.folder;
-	if (!isBrainFolder(folder)) return null;
-	return folder.startsWith("~/") ? path.join(os.homedir(), folder.slice(2)) : folder;
-}
-
-function usableFolder(folder: string): string | null {
-	try {
-		const real = fs.realpathSync(folder);
-		return fs.statSync(real).isDirectory() ? real : null;
-	} catch {
-		return null;
-	}
 }
 
 const sha256 = (text: string | Buffer) => crypto.createHash("sha256").update(text).digest("hex");
@@ -145,21 +136,23 @@ export interface ExportResult {
 	conflicts: string[];
 }
 
-/** Export everything into `<brainRoot>/LearnHarness/`. Exported for tests. */
+/** Export the overview + stats into the brain. Exported for tests. */
 export function exportToBrain(brainRoot: string, now = new Date()): ExportResult {
-	const exportDir = path.join(brainRoot, BRAIN_EXPORT_DIR);
+	const exportRel = exportDirFor(brainRoot);
+	const exportDir = path.join(brainRoot, ...exportRel.split("/"));
 	const { files } = buildBrainExport({
 		chats: readAllChats(),
 		graph: getGraph(stores.graphStore),
-		sources: stores.graphStore.readSources(),
+		organization: stores.sourceOrganizationStore.read(),
 		now: now.toISOString(),
 	});
 	const previous = readManifest(exportDir);
 	const next: Manifest = { version: 1, files: {} };
 	const result: ExportResult = { written: 0, unchanged: 0, removed: 0, conflicts: [] };
 
-	for (const [rel, content] of files) {
-		const target = path.join(brainRoot, rel);
+	for (const [name, content] of files) {
+		const rel = `${exportRel}/${name}`;
+		const target = path.join(exportDir, name);
 		if (!inside(exportDir, target)) continue;
 		const hash = sha256(content);
 		let current: string | null = null;
@@ -179,10 +172,10 @@ export function exportToBrain(brainRoot: string, now = new Date()): ExportResult
 	}
 
 	// Remove files LearnHarness wrote earlier that are no longer generated
-	// (renamed session, deleted proposition) — only when still untouched.
+	// (e.g. the per-session notes of the first version) — only when untouched.
 	for (const [rel, hash] of Object.entries(previous.files)) {
 		if (next.files[rel] !== undefined) continue;
-		const target = path.join(brainRoot, rel);
+		const target = path.join(brainRoot, ...rel.split("/"));
 		if (!inside(exportDir, target)) continue;
 		try {
 			if (sha256(fs.readFileSync(target)) === hash) {
@@ -195,13 +188,14 @@ export function exportToBrain(brainRoot: string, now = new Date()): ExportResult
 	return result;
 }
 
-// ─── Import ──────────────────────────────────────────────────────────────────
+// ─── Inbox import ────────────────────────────────────────────────────────────
 
 interface SyncState {
 	version: 1;
 	/** The resolved brain folder this state belongs to; another folder starts fresh. */
 	folder: string;
-	/** Brain-relative path → { sha256 of the imported content, outcome }. */
+	/** Inbox-relative path → { sha256 of the content, outcome } for files that
+	 *  stayed in the inbox (failed ones), so they are not re-billed every start. */
 	files: Record<string, { sha256: string; outcome: "completed" | "failed" | "partial" }>;
 }
 
@@ -219,9 +213,11 @@ function saveSyncState(state: SyncState): void {
 	writeAtomic(BRAIN_SYNC_STATE_FILE, `${JSON.stringify(state, null, "\t")}\n`);
 }
 
-/** Every import candidate under the brain, as POSIX-style relative paths.
- *  Symlinks are not followed. Exported for tests. */
-export function scanBrain(root: string): string[] {
+const inboxDir = (root: string) => path.join(root, ...BRAIN_INBOX_DIR.split("/"));
+
+/** Every document waiting in the inbox, as POSIX-style inbox-relative
+ *  paths. Symlinks are not followed. Exported for tests. */
+export function scanInbox(root: string): string[] {
 	const out: string[] = [];
 	const walk = (dir: string, relDir: string) => {
 		let entries: fs.Dirent[];
@@ -229,36 +225,64 @@ export function scanBrain(root: string): string[] {
 		for (const entry of entries) {
 			const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
 			if (entry.isDirectory()) {
-				if (entry.name.startsWith(".") || (!relDir && entry.name === BRAIN_EXPORT_DIR)) continue;
+				if (entry.name.startsWith(".") || (!relDir && entry.name === BRAIN_INBOX_DONE_DIR)) continue;
 				walk(path.join(dir, entry.name), rel);
-			} else if (entry.isFile() && brainImportCandidate(rel)) {
+			} else if (entry.isFile() && inboxImportCandidate(rel)) {
 				out.push(rel);
 			}
 		}
 	};
-	walk(root, "");
+	walk(inboxDir(root), "");
 	return out.sort();
 }
 
-/** Import new/changed notes. Stops early (and says why) when models or keys
- *  are missing, so a misconfiguration never burns through the whole brain. */
-async function importFromBrain(root: string): Promise<void> {
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
+const MAX_PDF_PAGES = 1000;
+
+/** A PDF becomes page-marked Markdown (as in the manual import); anything
+ *  else is read as text. Null = nothing importable. */
+async function documentText(bytes: Buffer): Promise<string | null> {
+	if (!PDF_MAGIC.every((byte, i) => bytes[i] === byte)) return bytes.toString("utf-8");
+	const pdf = await convertPdf(new Uint8Array(bytes), MAX_PDF_PAGES);
+	return pdf.kind === "converted" ? joinPages(pdf.pages) || null : null;
+}
+
+/** Move an imported document to Eingang/importiert/, never over another file. */
+function moveToDone(root: string, rel: string): void {
+	const from = path.join(inboxDir(root), ...rel.split("/"));
+	const doneDir = path.join(inboxDir(root), BRAIN_INBOX_DONE_DIR, ...rel.split("/").slice(0, -1));
+	fs.mkdirSync(doneDir, { recursive: true });
+	const ext = path.extname(from);
+	const base = path.basename(from, ext);
+	let target = path.join(doneDir, base + ext);
+	for (let n = 2; fs.existsSync(target); n++) target = path.join(doneDir, `${base} (${n})${ext}`);
+	fs.renameSync(from, target);
+}
+
+/** Import the documents waiting in the inbox. Stops early (and says why)
+ *  when models or keys are missing, so a misconfiguration never burns
+ *  through the inbox. */
+async function importInbox(root: string): Promise<void> {
 	const state = readSyncState(root);
 	const pending: Array<{ rel: string; text: string; hash: string }> = [];
-	for (const rel of scanBrain(root)) {
-		const file = path.join(root, rel);
+	for (const rel of scanInbox(root)) {
+		const file = path.join(inboxDir(root), ...rel.split("/"));
 		let bytes: Buffer;
 		try {
 			if (fs.statSync(file).size > MAX_IMPORT_BYTES) continue;
 			bytes = fs.readFileSync(file);
 		} catch { continue; }
-		const text = bytes.toString("utf-8");
-		if (!text.trim()) continue;
 		const hash = sha256(bytes);
 		if (state.files[rel]?.sha256 === hash) continue;
+		const text = await documentText(bytes).catch(() => null);
+		if (!text?.trim()) {
+			state.files[rel] = { sha256: hash, outcome: "failed" };
+			continue;
+		}
 		pending.push({ rel, text, hash });
 	}
 	if (pending.length === 0) {
+		saveSyncState(state);
 		setStatus({ import: { total: 0, done: 0, failed: 0, finishedAt: new Date().toISOString() } });
 		return;
 	}
@@ -267,11 +291,12 @@ async function importFromBrain(root: string): Promise<void> {
 	setStatus({ phase: "importing", import: { total: pending.length, done, failed } });
 	for (const item of pending) {
 		setStatus({ import: { total: pending.length, done, failed, current: item.rel } });
-		const filePath = `${BRAIN_SOURCE_PREFIX}${item.rel}`;
+		const filePath = `${BRAIN_SOURCE_PREFIX}${BRAIN_INBOX_DIR}/${item.rel}`;
 		try {
 			sourceDirectory.registerImport(filePath);
 			await extraction.importNotes({ filePath, text: item.text });
-			state.files[item.rel] = { sha256: item.hash, outcome: "completed" };
+			delete state.files[item.rel];
+			moveToDone(root, item.rel);
 		} catch (err) {
 			if (err instanceof ModelsNotConfiguredError || err instanceof ProviderKeyMissingError) {
 				throw new Error("Import angehalten: In LearnHarness sind noch keine Modelle bzw. Keys eingerichtet.", { cause: err });
@@ -280,7 +305,7 @@ async function importFromBrain(root: string): Promise<void> {
 				// Not recorded: tried again at the next start.
 			} else {
 				failed++;
-				// Recorded with its hash so an unchanged failing note is not re-billed every start.
+				// Recorded with its hash so an unchanged failing document is not re-billed every start.
 				state.files[item.rel] = { sha256: item.hash, outcome: err instanceof NotesImportError && err.outcome === "partial" ? "partial" : "failed" };
 				console.error(`[brain] import failed for ${item.rel}:`, err instanceof Error ? err.message : err);
 			}
@@ -302,6 +327,7 @@ function runExport(root: string): void {
 		phase: "idle",
 		error: undefined,
 		lastExportAt: new Date().toISOString(),
+		exportDir: exportDirFor(root),
 		exportedFiles: result.written + result.unchanged,
 		conflicts: result.conflicts,
 	});
@@ -347,7 +373,7 @@ function scheduleExport(): void {
 	rt.exportTimer.unref?.();
 }
 
-/** Import (new/changed notes) then export. `force` re-runs it after the
+/** Import the inbox, then export. `force` re-runs it after the
  *  folder setting changed; otherwise it runs once per app start. */
 export function startBrainSync(options: { force?: boolean } = {}): Promise<void> {
 	const rt = runtime();
@@ -365,7 +391,7 @@ export function startBrainSync(options: { force?: boolean } = {}): Promise<void>
 		const root = resolveOrReport();
 		if (!root) return;
 		try {
-			await importFromBrain(root);
+			await importInbox(root);
 			runExport(root);
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);
