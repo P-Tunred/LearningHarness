@@ -60,6 +60,36 @@ describe("parseExamPlan", () => {
 	});
 });
 
+describe("English plans and planning fields", () => {
+	const EN = [
+		"---", "exam: FODS Theory Exam", "date: 2026-12-09", "hours_per_week: 14", "review_from: 2026-11-26", "---",
+		"## Decision trees", "Weight: high", "Effort: 7 h", "Goal: compute information gain.",
+		"## Distances", "Weight: medium", "Effort: 3,5 hours",
+		"## Odd one", "Weight: urgent", "Effort: lots",
+	].join("\n");
+	const plan = parseExamPlan(EN, "x");
+
+	it("reads English keys, weights and effort", () => {
+		assert.equal(plan.exam, "FODS Theory Exam");
+		assert.equal(plan.date, "2026-12-09");
+		assert.equal(plan.hoursPerWeek, 14);
+		assert.equal(plan.reviewFrom, "2026-11-26");
+		assert.deepEqual(plan.focuses.map((f) => [f.weight, f.effortHours]), [["hoch", 7], ["mittel", 3.5], [null, null]]);
+	});
+
+	it("keeps the effort line in the text, and an unknown weight too", () => {
+		assert.match(plan.focuses[0]!.body, /^Effort: 7 h/);
+		assert.match(plan.focuses[2]!.body, /Weight: urgent/);
+	});
+
+	it("reads the German planning keys as well", () => {
+		const de = parseExamPlan("---\nklausur: X\nstunden_pro_woche: 10\nwiederholung_ab: 2026-11-20\n---\n## A\nAufwand: 2 h", "x");
+		assert.equal(de.hoursPerWeek, 10);
+		assert.equal(de.reviewFrom, "2026-11-20");
+		assert.equal(de.focuses[0]!.effortHours, 2);
+	});
+});
+
 describe("naming and prompt", () => {
 	it("matches focuses case- and space-insensitively", () => {
 		assert.equal(focusKey("  Bias  Variance "), focusKey("bias variance"));
@@ -70,12 +100,17 @@ describe("naming and prompt", () => {
 		assert.equal(examFolderName({ exam: "Statistik-Nachklausur" }), "Statistik-Nachklausur");
 	});
 
-	it("carries exam, focus, weight, body, context and the plan path", () => {
+	it("names the folder after an English exam name as it is", () => {
+		assert.equal(examFolderName({ exam: "FODS Theory Exam" }), "FODS Theory Exam");
+	});
+
+	it("writes the opening prompt in English with exam, focus, weight, body, context and plan path", () => {
 		const plan = parseExamPlan(PLAN, "fods");
 		const prompt = openingPrompt(plan, plan.focuses[0]!, "/brain/LearnHarness/Auftraege/fods.md");
-		assert.match(prompt, /^Klausurvorbereitung: FODS am 2026-11-20\.\nSchwerpunkt: Bias-Variance-Tradeoff \(Gewicht: hoch\)\./);
+		assert.match(prompt, /^Exam preparation: FODS on 2026-11-20\.\nFocus: Bias-Variance-Tradeoff \(weight: high\)\./);
 		assert.match(prompt, /Lecture05\.pdf/);
-		assert.match(prompt, /Zur ganzen Klausur:\nSchriftlich/);
+		assert.match(prompt, /About the whole exam:\nSchriftlich/);
 		assert.match(prompt, /`\/brain\/LearnHarness\/Auftraege\/fods\.md`/);
+		assert.match(prompt, /Teach me in English\./);
 	});
 });

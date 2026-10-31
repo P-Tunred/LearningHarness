@@ -19,6 +19,8 @@
  * IDLE_GAP_MS is a pause and does not count.
  */
 import type { ChatRecord } from "./contracts/chat.ts";
+import { derivePlanStatusesLh } from "./contracts/plan.ts";
+import type { LhMessage } from "./native-messages.ts";
 import type { DerivedGraph } from "./graph.ts";
 import type { SourceOrganization } from "./source-organization.ts";
 
@@ -303,12 +305,20 @@ export function summarizeTopics(
 export interface ExamInput {
 	exam: string;
 	date: string | null;
-	focuses: ReadonlyArray<{ title: string; weight: "hoch" | "mittel" | "niedrig" | null; chatId: string }>;
+	hoursPerWeek?: number | null;
+	reviewFrom?: string | null;
+	focuses: ReadonlyArray<{ title: string; weight: "hoch" | "mittel" | "niedrig" | null; effortHours?: number | null; chatId: string }>;
 }
+
+/** Below this many graded answers "understanding" is not yet measurable. */
+const MIN_GRADED_FOR_UNDERSTANDING = 3;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface ExamSummary {
 	exam: string;
 	date: string | null;
+	hoursPerWeek: number | null;
+	reviewFrom: string | null;
 	total: number;
 	/** Focus sessions with at least one message from Paul. */
 	started: number;
@@ -317,10 +327,19 @@ export interface ExamSummary {
 	focuses: Array<{
 		title: string;
 		weight: "hoch" | "mittel" | "niedrig" | null;
+		effortHours: number | null;
 		started: boolean;
 		learningMinutes: number;
 		openQuestions: number;
 		lastActive: string | null;
+		/** Nodes in the session's plan (0 before the agent drew one). */
+		planNodes: number;
+		/** Plan nodes worked through: earlier ones fully, the current one half. */
+		progress: number;
+		/** Share of graded answers that were right; null below 3 answers. */
+		understanding: number | null;
+		/** progress × understanding — how much of the effort is behind him. */
+		done: number;
 	}>;
 }
 
@@ -385,10 +404,23 @@ export function summarizeExams(exams: readonly ExamInput[], chats: readonly Chat
 			const chat = byId.get(f.chatId);
 			const d = chat ? digestSession(chat, idleGapMs) : null;
 			const started = !!chat && chat.messages.some((m) => (m as { role?: unknown }).role === "user");
+			const tree = chat?.tree;
+			const planNodes = tree?.nodes.length ?? 0;
+			let progress = 0;
+			if (chat && tree && planNodes > 0) {
+				const s = derivePlanStatusesLh(tree, chat.messages as unknown as LhMessage[]);
+				progress = Math.min(1, (s.visited.size + (s.current ? 0.5 : 0)) / planNodes);
+			}
+			const understanding = d && d.graded >= MIN_GRADED_FOR_UNDERSTANDING ? d.correct / d.graded : null;
 			return {
 				title: f.title,
 				weight: f.weight,
+				effortHours: f.effortHours ?? null,
 				started,
+				planNodes,
+				progress: round2(progress),
+				understanding: understanding === null ? null : round2(understanding),
+				done: round2(progress * (understanding ?? 1)),
 				learningMinutes: d ? minutes(d.learningMs) : 0,
 				openQuestions: d ? d.unsure.length : 0,
 				lastActive: d ? ([...d.learningByDay.keys()].sort().at(-1) ?? null) : null,
@@ -397,6 +429,8 @@ export function summarizeExams(exams: readonly ExamInput[], chats: readonly Chat
 		return {
 			exam: e.exam,
 			date: e.date,
+			hoursPerWeek: e.hoursPerWeek ?? null,
+			reviewFrom: e.reviewFrom ?? null,
 			total: focuses.length,
 			started: focuses.filter((f) => f.started).length,
 			learningMinutes: focuses.reduce((sum, f) => sum + f.learningMinutes, 0),

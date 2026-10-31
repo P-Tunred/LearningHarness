@@ -46,7 +46,7 @@ describe("exam plan sync", () => {
 		for (const f of overview!.focuses) {
 			assert.equal(org.placements[f.chatId]?.folderId, folder!.id);
 			assert.equal(stores.chatStore.getChat(f.chatId)?.title, f.title);
-			assert.match(examOpeningPrompt(f.chatId) ?? "", new RegExp(`Schwerpunkt: ${f.title}`));
+			assert.match(examOpeningPrompt(f.chatId) ?? "", new RegExp(`Focus: ${f.title}`));
 		}
 		assert.equal(stores.chatStore.listChats().length, chatsBefore + 2);
 	});

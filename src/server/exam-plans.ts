@@ -35,9 +35,11 @@ const MAX_PLAN_BYTES = 256 * 1024;
 interface PlanState {
 	exam: string;
 	date: string | null;
+	hoursPerWeek?: number | null;
+	reviewFrom?: string | null;
 	folderId: string | null;
 	/** focusKey → the session created for it, with the focus as last read. */
-	sessions: Record<string, { chatId: string; title: string; weight: ExamWeight | null }>;
+	sessions: Record<string, { chatId: string; title: string; weight: ExamWeight | null; effortHours?: number | null }>;
 	error?: string;
 }
 
@@ -125,20 +127,20 @@ export function syncExamPlans(root: string): ExamSyncResult {
 			continue;
 		}
 		result.plans++;
-		const entry: PlanState = { exam: plan.exam, date: plan.date, folderId: previous?.folderId ?? null, sessions: { ...previous?.sessions } };
+		const entry: PlanState = { exam: plan.exam, date: plan.date, hoursPerWeek: plan.hoursPerWeek, reviewFrom: plan.reviewFrom, folderId: previous?.folderId ?? null, sessions: { ...previous?.sessions } };
 		const missing = plan.focuses.filter((f) => !entry.sessions[focusKey(f.title)]);
 		if (missing.length) entry.folderId = ensureFolder(plan, entry.folderId);
 		for (const focus of plan.focuses) {
 			const key = focusKey(focus.title);
 			const known = entry.sessions[key];
 			if (known) {
-				entry.sessions[key] = { ...known, weight: focus.weight };
+				entry.sessions[key] = { ...known, weight: focus.weight, effortHours: focus.effortHours };
 				continue;
 			}
 			const chatId = createFocusSession(focus.title);
 			sourceDirectory.change({ action: "move", kind: "source", id: chatId, parentId: entry.folderId });
 			state.openings[chatId] = openingPrompt(plan, focus, full);
-			entry.sessions[key] = { chatId, title: focus.title, weight: focus.weight };
+			entry.sessions[key] = { chatId, title: focus.title, weight: focus.weight, effortHours: focus.effortHours };
 			result.created++;
 		}
 		state.plans[file] = entry;
@@ -160,13 +162,21 @@ export function examOpeningPrompt(chatId: string): string | undefined {
 export interface ExamOverview {
 	exam: string;
 	date: string | null;
-	focuses: Array<{ title: string; weight: ExamWeight | null; chatId: string }>;
+	hoursPerWeek: number | null;
+	reviewFrom: string | null;
+	focuses: Array<{ title: string; weight: ExamWeight | null; effortHours: number | null; chatId: string }>;
 }
 
 /** The plans as the export needs them (pure data; no stats here). */
 export function examOverviews(root: string): ExamOverview[] {
 	const state = readState(root);
 	return Object.values(state.plans)
-		.map((p) => ({ exam: p.exam, date: p.date, focuses: Object.values(p.sessions) }))
+		.map((p) => ({
+			exam: p.exam,
+			date: p.date,
+			hoursPerWeek: p.hoursPerWeek ?? null,
+			reviewFrom: p.reviewFrom ?? null,
+			focuses: Object.values(p.sessions).map((s) => ({ ...s, effortHours: s.effortHours ?? null })),
+		}))
 		.sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.exam.localeCompare(b.exam));
 }
