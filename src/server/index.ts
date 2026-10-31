@@ -55,5 +55,5 @@ export { claudeCodeInstallationResponse } from "./claude-code.ts";
 export * from "./custom-provider.ts";
 export { customProviderGet, customProviderMutation } from "./custom-provider-http.ts";
 // Second Brain link (fork addition): export to / import from a Markdown folder.
-export { brainStatus, startBrainSync, type BrainStatus } from "./brain.ts";
+export { brainStatus, examProgressNow, startBrainSync, type BrainStatus } from "./brain.ts";
 export { examOpeningPrompt } from "./exam-plans.ts";

@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { localDay } from "../src/core/brain-export.ts";
 
 const GOLDEN = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "golden-data");
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), "lh-exam-data-"));
@@ -43,6 +44,7 @@ describe("exam plan sync", () => {
 		assert.ok(folder, "folder created");
 		const [overview] = examOverviews(BRAIN);
 		assert.equal(overview!.exam, "FODS");
+		assert.equal(overview!.planStart, localDay(Date.now()), "the progress line starts the day the plan was read");
 		for (const f of overview!.focuses) {
 			assert.equal(org.placements[f.chatId]?.folderId, folder!.id);
 			assert.equal(stores.chatStore.getChat(f.chatId)?.title, f.title);
@@ -73,6 +75,8 @@ describe("exam plan sync", () => {
 		assert.equal(stats.exams[0].date, "2026-11-20");
 		assert.equal(stats.exams[0].total, 3);
 		assert.equal(stats.exams[0].started, 1);
+		assert.equal(typeof stats.exams[0].minutesByDay, "object", "per-day minutes for Daily");
+		assert.ok(stats.exams[0].focuses.every((f: { chatId?: string }) => typeof f.chatId === "string"));
 		const md = fs.readFileSync(path.join(BRAIN, "wiki", "learnharness", "lernstand.md"), "utf-8");
 		assert.match(md, /## Klausuren\n\n### FODS — 2026-11-20\n\n1 von 3 Schwerpunkten angefangen/);
 	});

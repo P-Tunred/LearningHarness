@@ -307,6 +307,8 @@ export interface ExamInput {
 	date: string | null;
 	hoursPerWeek?: number | null;
 	reviewFrom?: string | null;
+	/** First day of the plan (when LearnHarness first read it). */
+	planStart?: string | null;
 	focuses: ReadonlyArray<{ title: string; weight: "hoch" | "mittel" | "niedrig" | null; effortHours?: number | null; chatId: string }>;
 }
 
@@ -319,13 +321,18 @@ export interface ExamSummary {
 	date: string | null;
 	hoursPerWeek: number | null;
 	reviewFrom: string | null;
+	planStart: string | null;
 	total: number;
+	/** Learning minutes in this exam's sessions per local day (Daily takes
+	 *  the larger of this and its own timer). */
+	minutesByDay: Record<string, number>;
 	/** Focus sessions with at least one message from Paul. */
 	started: number;
 	learningMinutes: number;
 	openQuestions: number;
 	focuses: Array<{
 		title: string;
+		chatId: string;
 		weight: "hoch" | "mittel" | "niedrig" | null;
 		effortHours: number | null;
 		started: boolean;
@@ -400,9 +407,11 @@ export interface BrainStats {
 export function summarizeExams(exams: readonly ExamInput[], chats: readonly ChatRecord[], idleGapMs = IDLE_GAP_MS): ExamSummary[] {
 	const byId = new Map(chats.map((c) => [c.id, c]));
 	return exams.map((e) => {
+		const byDay = new Map<string, number>();
 		const focuses = e.focuses.map((f) => {
 			const chat = byId.get(f.chatId);
 			const d = chat ? digestSession(chat, idleGapMs) : null;
+			for (const [dayKey, ms] of d?.learningByDay ?? []) byDay.set(dayKey, (byDay.get(dayKey) ?? 0) + ms);
 			const started = !!chat && chat.messages.some((m) => (m as { role?: unknown }).role === "user");
 			const tree = chat?.tree;
 			const planNodes = tree?.nodes.length ?? 0;
@@ -414,6 +423,7 @@ export function summarizeExams(exams: readonly ExamInput[], chats: readonly Chat
 			const understanding = d && d.graded >= MIN_GRADED_FOR_UNDERSTANDING ? d.correct / d.graded : null;
 			return {
 				title: f.title,
+				chatId: f.chatId,
 				weight: f.weight,
 				effortHours: f.effortHours ?? null,
 				started,
@@ -431,7 +441,9 @@ export function summarizeExams(exams: readonly ExamInput[], chats: readonly Chat
 			date: e.date,
 			hoursPerWeek: e.hoursPerWeek ?? null,
 			reviewFrom: e.reviewFrom ?? null,
+			planStart: e.planStart ?? null,
 			total: focuses.length,
+			minutesByDay: Object.fromEntries([...byDay].sort(([a], [b]) => a.localeCompare(b)).map(([k, ms]) => [k, minutes(ms)]).filter(([, m]) => (m as number) > 0)),
 			started: focuses.filter((f) => f.started).length,
 			learningMinutes: focuses.reduce((sum, f) => sum + f.learningMinutes, 0),
 			openQuestions: focuses.reduce((sum, f) => sum + f.openQuestions, 0),

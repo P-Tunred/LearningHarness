@@ -28,7 +28,10 @@ import {
 	BRAIN_SOURCE_PREFIX,
 	buildBrainExport,
 	inboxImportCandidate,
+	localDay,
+	summarizeExams,
 } from "../core/brain-export.ts";
+import { examProgress, minutesTodayAndWeek, type ExamProgress } from "../core/exam-progress.ts";
 import type { ChatRecord } from "../core/contracts/chat.ts";
 import { emit, subscribe } from "../core/events.ts";
 import { getGraph } from "../core/graph.ts";
@@ -78,6 +81,21 @@ function runtime() {
 	const g = globalThis as BrainGlobal;
 	g.__lhBrain ??= { status: { folder: null, phase: "off" }, started: false, running: null, exportTimer: null, unsubscribe: null };
 	return g.__lhBrain;
+}
+
+/** Where Paul stands on each exam plan right now (the sidebar's progress
+ *  strip). Empty without a usable brain folder or without plans. */
+export function examProgressNow(now = new Date()): ExamProgress[] {
+	const configured = configuredBrainFolder();
+	const root = configured ? usableFolder(configured) : null;
+	if (!root) return [];
+	const overviews = examOverviews(root);
+	if (overviews.length === 0) return [];
+	const today = localDay(now.getTime());
+	return summarizeExams(overviews, readAllChats()).map((exam) => {
+		const minutes = minutesTodayAndWeek(exam.minutesByDay, today);
+		return examProgress({ exam, planStart: exam.planStart, today, minutesToday: minutes.today, minutesWeek: minutes.week });
+	});
 }
 
 export function brainStatus(): BrainStatus {

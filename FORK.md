@@ -79,13 +79,29 @@ nicht jede Aussage.
   `klausur-auftraege.json` im Datenordner.
 - **Lernzeit** = Zeit zwischen deinen Aktionen in einer Session; Pausen über
   10 Minuten zählen nicht.
+- **Klausur-Fortschritt (unten in der Seitenleiste)**: Solange ein
+  Klausur-Auftrag läuft, zeigt ein schmaler Block je Klausur (englisch):
+  Balken = wie viel vom Plan erledigt ist (Fortschritt × Verstehen, nach
+  Aufwand gewichtet), Strich = wo du bei gleichmäßigem Tempo heute früh
+  stündest (gerade Linie vom Tag, an dem der Auftrag gelesen wurde, bis zur
+  Wiederholung). Daneben der Abstand in Stunden (ahead / on track / behind),
+  wie viel verstanden ist und heute gelernt / Tagesziel / noch offen. Ein
+  Klick zeigt, was als Nächstes dran ist (führt in die Session), die Woche
+  und wie das Tagesziel entsteht: Restaufwand ÷ Lerntage bis zur
+  Wiederholung, jeden Tag neu — dieselbe Rechnung wie der Klausur-Planer in
+  Daily. Lernzeit misst das Harness selbst (keine Stoppuhr); je Tag geht sie
+  als `minutesByDay` in den Export, Daily nimmt pro Tag das Größere aus
+  Timer und Harness.
 - Code: `src/core/brain-export.ts` (Lernstand + Statistik, ohne
   Dateizugriff), `src/server/brain.ts` (Export, Eingang, Ablauf),
   `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),
   `src/core/exam-plan.ts` + `src/server/exam-plans.ts` (Klausur-Aufträge),
+  `src/core/exam-progress.ts` + `app/api/exam-progress/route.ts` +
+  `components/exam-progress.tsx` (Klausur-Fortschritt),
   `app/api/brain/route.ts`, `components/settings/brain-section.tsx`. Tests:
   `tests/brain-export.test.ts`, `tests/brain-sync.test.ts`,
-  `tests/exam-plan.test.ts`, `tests/exam-plans-sync.test.ts`.
+  `tests/exam-plan.test.ts`, `tests/exam-plans-sync.test.ts`,
+  `tests/exam-progress.test.ts`.
 
 ### 4. Startsymbol für den Mac
 

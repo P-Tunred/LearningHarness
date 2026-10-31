@@ -26,6 +26,7 @@ import {
 	type ExamPlan,
 	type ExamWeight,
 } from "../core/exam-plan.ts";
+import { localDay } from "../core/brain-export.ts";
 import { sourceDirectory } from "./source-organization.ts";
 import { stores } from "./stores.ts";
 
@@ -37,6 +38,8 @@ interface PlanState {
 	date: string | null;
 	hoursPerWeek?: number | null;
 	reviewFrom?: string | null;
+	/** First day LearnHarness read the plan — the start of the progress line. */
+	since?: string;
 	folderId: string | null;
 	/** focusKey → the session created for it, with the focus as last read. */
 	sessions: Record<string, { chatId: string; title: string; weight: ExamWeight | null; effortHours?: number | null }>;
@@ -127,7 +130,8 @@ export function syncExamPlans(root: string): ExamSyncResult {
 			continue;
 		}
 		result.plans++;
-		const entry: PlanState = { exam: plan.exam, date: plan.date, hoursPerWeek: plan.hoursPerWeek, reviewFrom: plan.reviewFrom, folderId: previous?.folderId ?? null, sessions: { ...previous?.sessions } };
+		const since = previous?.since ?? firstSessionDay(previous?.sessions) ?? localDay(Date.now());
+		const entry: PlanState = { exam: plan.exam, date: plan.date, hoursPerWeek: plan.hoursPerWeek, reviewFrom: plan.reviewFrom, since, folderId: previous?.folderId ?? null, sessions: { ...previous?.sessions } };
 		const missing = plan.focuses.filter((f) => !entry.sessions[focusKey(f.title)]);
 		if (missing.length) entry.folderId = ensureFolder(plan, entry.folderId);
 		for (const focus of plan.focuses) {
@@ -149,6 +153,16 @@ export function syncExamPlans(root: string): ExamSyncResult {
 	return result;
 }
 
+/** Plans read before `since` existed start on the day their first session
+ *  was created. */
+function firstSessionDay(sessions: PlanState["sessions"] | undefined): string | null {
+	const days = Object.values(sessions ?? {})
+		.map((s) => Date.parse(stores.chatStore.getChat(s.chatId)?.createdAt ?? ""))
+		.filter((ms) => Number.isFinite(ms))
+		.map((ms) => localDay(ms));
+	return days.length ? days.sort()[0]! : null;
+}
+
 /** The opening prompt a plan left for this session, while it still has no
  *  conversation (the chat page sends it on first open). */
 export function examOpeningPrompt(chatId: string): string | undefined {
@@ -164,6 +178,7 @@ export interface ExamOverview {
 	date: string | null;
 	hoursPerWeek: number | null;
 	reviewFrom: string | null;
+	planStart: string | null;
 	focuses: Array<{ title: string; weight: ExamWeight | null; effortHours: number | null; chatId: string }>;
 }
 
@@ -176,6 +191,7 @@ export function examOverviews(root: string): ExamOverview[] {
 			date: p.date,
 			hoursPerWeek: p.hoursPerWeek ?? null,
 			reviewFrom: p.reviewFrom ?? null,
+			planStart: p.since ?? firstSessionDay(p.sessions),
 			focuses: Object.values(p.sessions).map((s) => ({ ...s, effortHours: s.effortHours ?? null })),
 		}))
 		.sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.exam.localeCompare(b.exam));

@@ -87,3 +87,5 @@ export * from "./coverage.ts";
 // ONE session→markdown formatter — the extractor's view and the user-facing
 // export share it. Pure, browser-safe.
 export * from "./session-markdown.ts";
+// Exam progress (fork addition): the sidebar strip renders its result types.
+export * from "./exam-progress.ts";

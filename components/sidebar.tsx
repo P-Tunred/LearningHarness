@@ -8,6 +8,7 @@ import { DeleteSessionDialog } from "@/components/delete-session-dialog";
 import type { ChatDeleteMode } from "@/src/core";
 import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { ActivitySection } from "@/components/activity-dock";
+import { ExamProgress } from "@/components/exam-progress";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
 import { BrailleSpinner } from "@/components/braille-spinner";
@@ -845,6 +846,10 @@ function SessionsSidebar() {
 					    flex-1, so this pins to the bottom. Sidebar closed = the
 					    learner opted out (no ambient signal, user decision). */}
 					<ActivitySection />
+
+					{/* Exam progress (fork addition): ahead of or behind the plan,
+					    and what is left today — only while an exam plan runs. */}
+					<ExamProgress />
 
 					{/* Settings entry (settings-app wave): same row language as
 					    New session — quiet, bottom-pinned, opens the centered
