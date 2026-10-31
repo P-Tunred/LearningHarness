@@ -1,48 +1,62 @@
-# LearnHarness über Hermes laufen lassen (Z.AI)
+# LearnHarness über Hermes laufen lassen
 
-```
-LearnHarness  →  Hermes-Proxy (dein Mac, 127.0.0.1:8645)  →  Z.AI (GLM)
-```
+Zwei Wege, je nach Abo. Beide laufen auf deinem Mac und nutzen den Login bzw.
+Key, den du **in Hermes** eingerichtet hast. Hermes selbst wird dafür nicht
+verändert; die Skripte nutzen nur Hermes' eigene Bausteine (Keys, Login,
+Token-Erneuerung, Header).
 
-LearnHarness schickt seine KI-Anfragen an Hermes. Hermes hängt deinen
-Z.AI-Key an (den, den du in Hermes eingerichtet hast) und leitet die Anfrage
-unverändert weiter – inklusive der Lern-Tools (Quiz, Lernplan, …).
-
-Hermes selbst wird dafür **nicht verändert**: `zai_proxy.py` nutzt Hermes'
-eingebauten Proxy-Server und Hermes' gespeicherte Keys.
+| Abo | Startbefehl | URL für LearnHarness |
+|---|---|---|
+| **Z.AI (GLM)** | `./integrations/hermes/start-zai-proxy.sh` | `http://127.0.0.1:8645/v1` |
+| **ChatGPT / OpenAI** | `./integrations/hermes/start-codex-proxy.sh` | `http://127.0.0.1:8646/v1` |
 
 ## Einrichten
 
-1. In Hermes muss ein Z.AI-Key eingerichtet sein (`GLM_API_KEY` bzw.
-   `ZAI_API_KEY` in `~/.hermes/.env`, z. B. über `hermes setup`).
-2. Proxy starten (Terminal offen lassen):
-
-   ```bash
-   ./integrations/hermes/start-zai-proxy.sh
-   ```
-
+1. In Hermes eingerichtet sein muss:
+   - Z.AI: ein Key (`GLM_API_KEY` bzw. `ZAI_API_KEY` in `~/.hermes/.env`, z. B. über `hermes setup`)
+   - ChatGPT: der Codex-Login (`hermes auth add openai-codex` bzw. `hermes setup`)
+2. Startbefehl aus der Tabelle ausführen (Terminal offen lassen). Beide
+   gleichzeitig geht auch (verschiedene Ports).
 3. In LearnHarness: **Settings → Providers → + Add a provider → Custom
-   endpoint**
-   - URL: `http://127.0.0.1:8645/v1`
-   - **Keyless**
-   - **Connect**, dann für Strong / Cheap / Vision ein GLM-Modell wählen.
+   endpoint** → URL aus der Tabelle, **Keyless**, **Connect**, dann Modelle
+   für Strong / Cheap / Vision wählen.
 
-Findet das Skript Hermes nicht, gib den Python-Pfad deiner Hermes-Installation an:
-`HERMES_PYTHON=/pfad/zu/hermes/venv/bin/python ./integrations/hermes/start-zai-proxy.sh`
+LearnHarness kennt nur **einen** Custom Endpoint. Zum Wechseln zwischen Z.AI
+und ChatGPT die URL im Custom-Endpoint-Editor ändern.
 
-## Was geht, was nicht
+Findet ein Skript Hermes nicht, den Python-Pfad deiner Hermes-Installation angeben:
+`HERMES_PYTHON=/pfad/zu/hermes/venv/bin/python ./integrations/hermes/start-codex-proxy.sh`
 
-- **Z.AI: ja.** Getestet mit einer echten LearnHarness-Session gegen ein
-  Test-Modell: Hermes ersetzt den Platzhalter-Key durch den Z.AI-Key, alle
-  Lern-Tools kommen beim Modell an, die Antwort kommt zurück (auch Streaming).
-- **ChatGPT-Abo (OpenAI): nicht über diesen Weg.** Hermes spricht mit dem
-  ChatGPT-Abo über ein anderes Protokoll (Responses API) als der
-  LearnHarness-Endpoint (Chat Completions). Nutze dafür die eingebaute
-  ChatGPT-Verbindung in LearnHarness (Settings → Providers).
-- **Nicht der Hermes-API-Server** (`/v1/chat/completions` auf dem Gateway):
-  der führt Hermes' eigenen Agenten aus und gibt LearnHarness' Tools nicht ans
-  Modell weiter.
-- Der Proxy protokolliert nichts – diese Anfragen erscheinen nicht im
-  Hermes-Dashboard. Er lauscht nur auf 127.0.0.1 (nicht im Netzwerk).
-- Ob ein GLM-Modell die Lern-Tools gut bedient und Bilder versteht (Vision),
-  zeigt erst der Alltag.
+## Wie es funktioniert
+
+```
+Z.AI:     LearnHarness → zai_proxy.py   → Z.AI          (unverändert durchgereicht, Hermes' Key)
+ChatGPT:  LearnHarness → codex_proxy.py → chatgpt.com   (übersetzt, Hermes' Codex-Login)
+```
+
+- **Z.AI** spricht dasselbe Format wie LearnHarness; der Proxy hängt nur den
+  Key an (Hermes' eingebauter Proxy-Server).
+- **ChatGPT** läuft in Hermes über das Codex-Backend
+  (`chatgpt.com/backend-api/codex`, „Responses“-Format). `codex_proxy.py`
+  übersetzt Nachrichten, Bilder, Lern-Tools und Tool-Ergebnisse hin und zurück
+  (auch Streaming), nutzt Hermes' Login inkl. Token-Erneuerung und Konto-Header
+  und kürzt Hermes' `-900k`-Modellnamen wie Hermes selbst.
+
+## Getestet
+
+Beide Wege mit einer echten LearnHarness-Session gegen Test-Server (kein echter
+Z.AI-/ChatGPT-Zugang in der Entwicklungsumgebung): die Lern-Tools kommen beim
+Modell an, Tool-Aufrufe und -Ergebnisse laufen hin und zurück, die Antwort
+landet in der Session. Übersetzer-Tests: `./run-with-hermes.sh test_codex_proxy.py`.
+
+## Grenzen
+
+- **ChatGPT-Weg ist inoffiziell:** Das Codex-Backend ist OpenAIs Zugang für
+  Codex-Programme, keine öffentliche API. Ändert OpenAI es, kann der Proxy
+  brechen, bis er angepasst ist. Der offizielle Weg ohne Hermes ist die
+  eingebaute ChatGPT-Anmeldung in LearnHarness (Settings → Providers).
+- Nicht der Hermes-API-Server (`/v1/chat/completions` auf dem Gateway): der
+  führt Hermes' eigenen Agenten aus und gibt LearnHarness' Tools nicht weiter.
+- Die Proxys protokollieren nichts; diese Anfragen erscheinen nicht im
+  Hermes-Dashboard. Sie lauschen nur auf 127.0.0.1 und lehnen Browser-Anfragen ab.
+- LearnHarness zeigt für den Custom Endpoint keine Kosten an (Abo-Nutzung).

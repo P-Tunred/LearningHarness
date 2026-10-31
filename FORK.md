@@ -21,10 +21,12 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
   Einstellung in `src/core/settings.ts`, Tests in
   `tests/window-opacity.test.ts`.
 
-### 2. Anfragen über Hermes (Z.AI)
+### 2. Anfragen über Hermes (Z.AI und ChatGPT)
 
-- `integrations/hermes/`: Startskript für einen Hermes-Proxy mit Z.AI.
-  LearnHarness → Hermes → Z.AI, mit dem Z.AI-Key aus Hermes.
+- `integrations/hermes/`: Startskripte für Hermes-Proxys.
+  - Z.AI: LearnHarness → Hermes → Z.AI, mit dem Z.AI-Key aus Hermes.
+  - ChatGPT-Abo: LearnHarness → Hermes → ChatGPT (Codex-Backend), mit Hermes'
+    Codex-Login; der Proxy übersetzt zwischen den Formaten.
 - Anleitung: [integrations/hermes/README.md](integrations/hermes/README.md).
 
 ### 3. Second Brain + Morning Dashboard
