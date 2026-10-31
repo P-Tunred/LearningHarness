@@ -106,6 +106,10 @@ npm install
 npm run desktop:dev
 ```
 
+Achtung: In diesem Modus ist `data/` im Repo der echte Datenordner (auch
+beim Mac-Starter). `npm test` läuft deshalb immer mit einem eigenen
+Temp-Ordner (`LH_DATA_DIR`), sonst legen mitgelieferte Tests dort Chats an.
+
 Der Testmodus (`desktop:dev`) läuft **neben** der installierten App und hat
 einen eigenen, getrennten Datenordner (`LearnHarness-dev`). Deine echten
 Lernsessions und Keys werden dabei nicht angefasst. API-Key bzw. Provider
