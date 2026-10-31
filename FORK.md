@@ -48,8 +48,10 @@ nicht jede Aussage.
   - `lernstand.md`: Themen der letzten 14 Tage (Thema, Rahmen = Ordner in
     LearnHarness, Lernzeit, zuletzt, Anzahl offener Fragen), darunter früher
     Gelerntes. Keine Fragen- oder Aussagentexte.
-  - `learnharness-stats.json` (Version 2) fürs Dashboard: Summen, Lernzeit pro
-    Tag, `topics` (zuletzt aktiv zuerst) und Sessions.
+  - `learnharness-stats.json` (Version 3) fürs Dashboard: Summen, Lernzeit pro
+    Tag, `topics` (zuletzt aktiv zuerst), Sessions und die gemessene Zeit des
+    Lern-Timers (siehe 5). Version 3 ergänzt nur Felder; wer Version 2 liest,
+    findet alles Alte unverändert.
   - Überschrieben werden nur Dateien, die LearnHarness selbst geschrieben hat
     (Liste in `.learnharness-export.json` daneben). Gelöscht wird eine alte
     eigene Datei nur, wenn du sie nicht bearbeitet hast.
@@ -77,8 +79,10 @@ nicht jede Aussage.
   Lernzeit, offene Fragen) steht im Lernstand unter „Klausuren“ und in
   `learnharness-stats.json` unter `exams`. Stand der Aufträge:
   `klausur-auftraege.json` im Datenordner.
-- **Lernzeit** = Zeit zwischen deinen Aktionen in einer Session; Pausen über
-  10 Minuten zählen nicht.
+- **Lernzeit** = gemessene Zeit des Lern-Timers (siehe 5). Wo er nicht lief,
+  bleibt die Schätzung: Zeit zwischen deinen Aktionen in einer Session, Pausen
+  über 10 Minuten zählen nicht. Pro Tag und Session gilt das Größere von
+  beidem, nie die Summe.
 - **Klausur-Fortschritt (unten in der Seitenleiste)**: Solange ein
   Klausur-Auftrag läuft, zeigt ein schmaler Block je Klausur (englisch):
   Balken = wie viel vom Plan erledigt ist (Fortschritt × Verstehen, nach
@@ -87,11 +91,11 @@ nicht jede Aussage.
   Wiederholung). Daneben der Abstand in Stunden (ahead / on track / behind),
   wie viel verstanden ist und heute gelernt / Tagesziel / noch offen. Ein
   Klick zeigt, was als Nächstes dran ist (führt in die Session), die Woche
-  und wie das Tagesziel entsteht: Restaufwand ÷ Lerntage bis zur
-  Wiederholung, jeden Tag neu — dieselbe Rechnung wie der Klausur-Planer in
-  Daily. Lernzeit misst das Harness selbst (keine Stoppuhr); je Tag geht sie
+  und wie das Tagesziel entsteht: Restaufwand im eigenen Tempo ÷ Lerntage
+  bis zur Wiederholung, jeden Tag neu — dieselbe Rechnung wie der
+  Klausur-Planer in Daily (`lernTempo`, siehe 5). Je Tag geht die Lernzeit
   als `minutesByDay` in den Export, Daily nimmt pro Tag das Größere aus
-  Timer und Harness.
+  seinem Timer und dem Harness.
 - Code: `src/core/brain-export.ts` (Lernstand + Statistik, ohne
   Dateizugriff), `src/server/brain.ts` (Export, Eingang, Ablauf),
   `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),
@@ -109,6 +113,63 @@ nicht jede Aussage.
 „LearnHarness (Hermes)“ an. Ein Klick: Update von GitHub, Tunnel zu Hermes,
 LearnHarness starten; Cmd+Q beendet alles. Anleitung:
 [integrations/mac/README.md](integrations/mac/README.md).
+
+### 5. Lern-Timer
+
+Ein kleiner Timer unten rechts im Fenster (unter 1100 px Breite oben rechts
+unter der Titelleiste, damit er nie über der Eingabe liegt): Fach des Chats,
+heute darin gemessene Zeit (mm:ss, ab einer Stunde h:mm) und ein Knopf
+Start / Pause / Resume. **Mod+Shift+T** (Cmd auf dem Mac) tut dasselbe, siehe
+[docs/keyboard.md](docs/keyboard.md). Ein Punkt zeigt den Zustand: grün = läuft,
+gelb = Chat ohne Fach. Sonst keine Animation. Beschriftung englisch wie der
+Rest der App („No subject“, „Still there?“).
+
+- **Was er misst**: echte Lernzeit — nur solange du ihn gestartet hast. Er
+  startet nie von selbst. Die Schätzung aus den Abständen zwischen
+  Nachrichten bleibt nur der Ersatz, wo er nicht lief.
+- **Wem er die Zeit gibt** (je Chat, in dieser Reihenfolge):
+  1. von Hand gewähltes Fach (Klick auf das Fach → Liste der Fächer,
+     „No subject“ oder „New subject…“; die Wahl bleibt für den Chat
+     gespeichert);
+  2. Chat gehört zu einem Klausur-Auftrag → Fach = Klausurname, und die Zeit
+     zählt zusätzlich für diesen Schwerpunkt (`chatId`);
+  3. Chat liegt in einem Ordner → Name des obersten Ordners;
+  4. sonst „No subject“, bis du eines wählst.
+  Wechselst du den Chat, während er läuft, endet das alte Stück und ein neues
+  beginnt beim neuen Chat — keine Minute doppelt, keine beim falschen Fach. Er
+  läuft über Chatwechsel weiter.
+- **Pausen von selbst**: Das Fenster meldet sich alle 30 s. Bleibt das länger
+  als 3 Minuten aus (Ruhezustand, App beendet, Absturz), endet das Stück beim
+  letzten Lebenszeichen; nach dem Aufwachen bleibt er pausiert, ohne zu
+  fragen. Nach 15 Minuten ohne Eingabe oder Scrollen im Fenster fragt er
+  leise „Still there?“; ohne Antwort pausiert er nach weiteren 5 Minuten und
+  bucht die Leerlaufzeit nicht (das Stück endet bei der letzten Eingabe).
+- **Speicher**: `study-timer.json` im LearnHarness-Datenordner. Das laufende
+  Stück wird bei jedem Lebenszeichen sofort geschrieben, übersteht also
+  Absturz und Neustart. Nichts verlässt den Rechner außer den Tagessummen im
+  Export.
+- **Export** (`learnharness-stats.json`, Version 3, nur neue Felder):
+  - `timer.byDay`: `{ "JJJJ-MM-TT": { "<Fach>": Minuten } }` für die letzten
+    28 Tage;
+  - je Klausur `timerMinutesByDay` (Schwerpunkt-Chats und alles, was aufs
+    Klausur-Fach gebucht ist);
+  - je Schwerpunkt `timerMinutes`;
+  - `minutesByDay` und `learningMinutes` nehmen pro Tag bzw. Session das
+    Größere aus gemessen und geschätzt, nie die Summe.
+- **Tempo**: Die Regeln aus Daily (`src/lib/lernTempo.ts`) stecken 1:1 in
+  `src/core/exam-progress.ts` (`paceFactor`, `restMinutesFocus`): Wie lange
+  du für erledigte Schwerpunkte wirklich gebraucht hast, gegen die
+  geschätzten Stunden (Faktor 0,5–3, erst ab zwei Schwerpunkten mit ≥ 25 %
+  und ≥ 30 min, sonst über alle Klausuren). Offene Fragen kosten 15 min
+  (höchstens 2 h). Daraus kommen Rest-Stunden und Tagesziel — dieselbe Zahl
+  in der Seitenleiste und in Daily. Gemessene Timer-Minuten fließen über
+  `learningMinutes` ein.
+- Code: `src/core/study-timer.ts` (Regeln, ohne Dateizugriff),
+  `src/server/study-timer.ts` (Speicher, Fach-Zuordnung),
+  `app/api/study-timer/route.ts`, `components/study-timer.tsx`, Taste in
+  `src/core/keyboard.ts`, Export in `src/core/brain-export.ts`. Tests:
+  `tests/study-timer.test.ts`, `tests/study-timer-sync.test.ts`, Export in
+  `tests/brain-export.test.ts`, Tempo in `tests/exam-progress.test.ts`.
 
 ## Diese Version starten (zum Ausprobieren)
 

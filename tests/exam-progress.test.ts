@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ExamSummary } from "../src/core/brain-export.ts";
-import { examProgress, minutesTodayAndWeek, restHours, standingOf, weekStart } from "../src/core/exam-progress.ts";
+import { examProgress, minutesTodayAndWeek, paceFactor, restHours, restMinutesFocus, standingOf, weekStart } from "../src/core/exam-progress.ts";
 
 type Focus = ExamSummary["focuses"][number];
 
@@ -17,6 +17,7 @@ function focus(title: string, over: Partial<Focus> = {}): Focus {
 		effortHours: 10,
 		started: false,
 		learningMinutes: 0,
+		timerMinutes: 0,
 		openQuestions: 0,
 		lastActive: null,
 		planNodes: 0,
@@ -36,6 +37,7 @@ function exam(focuses: Focus[], over: Partial<ExamSummary> = {}): ExamSummary {
 		planStart: "2026-10-31",
 		total: focuses.length,
 		minutesByDay: {},
+		timerMinutesByDay: {},
 		started: 0,
 		learningMinutes: 0,
 		openQuestions: 0,
@@ -159,5 +161,54 @@ describe("helpers", () => {
 		assert.equal(standingOf(-3, 60), "behind");
 		assert.equal(standingOf(-6, 60), "far-behind");
 		assert.equal(standingOf(2, 60), "ahead");
+	});
+});
+
+describe("pace that learns (same cases as Daily's tests/lern-tempo.test.mjs)", () => {
+	const pf = (effortHours: number, done: number, learningMinutes: number) => ({ effortHours, done, learningMinutes });
+
+	it("needs two focuses at least 25 % and 30 min along", () => {
+		assert.equal(paceFactor([pf(4, 0.5, 150)]), null);
+		assert.equal(paceFactor([pf(4, 0.1, 50), pf(4, 0.2, 60)]), null);
+	});
+
+	it("slower than planned → factor above 1; faster → never below 0.5", () => {
+		assert.equal(paceFactor([pf(4, 0.5, 180), pf(4, 1, 360)]), 1.5);
+		assert.equal(paceFactor([pf(10, 1, 60), pf(10, 1, 60)]), 0.5);
+	});
+
+	it("planned 30 min, half done after 60 min → the rest runs at its own pace", () => {
+		assert.equal(restMinutesFocus(focus("A", { effortHours: 0.5, done: 0.5, learningMinutes: 60 }), 1), 60);
+	});
+
+	it("little progress blends estimate and measurement", () => {
+		assert.equal(restMinutesFocus(focus("A", { effortHours: 2, done: 0.2, learningMinutes: 60 }), 1), 154);
+	});
+
+	it("untouched: estimate × the subject's pace, plus open questions; finished is finished", () => {
+		assert.equal(restMinutesFocus(focus("A", { effortHours: 2, openQuestions: 2 }), 1.5), 210);
+		assert.equal(restMinutesFocus(focus("A", { effortHours: 2, done: 0.95, learningMinutes: 200 }), 2), 0);
+	});
+
+	it("a slow subject raises today's target above the plan's", () => {
+		const slow = [
+			focus("A", { effortHours: 4, done: 0.5, learningMinutes: 180, started: true }),
+			focus("B", { effortHours: 4, done: 1, learningMinutes: 360, started: true }),
+			focus("C", { effortHours: 4 }),
+		];
+		const p = active(examProgress({ exam: exam(slow), planStart: "2026-10-31", today: "2026-11-20", minutesToday: 0, minutesWeek: 0 }));
+		assert.equal(p.pace, 1.5);
+		// A: own pace 360 per whole, half left = 180; C: 4 h × 1.5 = 360 → 540 min over 5 days.
+		assert.equal(p.restHours, 9);
+		assert.equal(p.targetToday, 120);
+		// The plan alone: 2 h + 4 h = 360 min over 5 days → 75.
+		assert.equal(p.planTargetToday, 75);
+	});
+
+	it("falls back to the pace across all exams", () => {
+		const others = [pf(4, 0.5, 180), pf(4, 1, 360)];
+		const p = active(examProgress({ exam: exam([focus("A", { effortHours: 4 })]), planStart: "2026-10-31", today: "2026-11-05", minutesToday: 0, minutesWeek: 0, allFocuses: others }));
+		assert.equal(p.pace, 1.5);
+		assert.equal(p.restHours, 6);
 	});
 });

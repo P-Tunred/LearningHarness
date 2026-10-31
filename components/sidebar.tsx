@@ -9,6 +9,7 @@ import type { ChatDeleteMode } from "@/src/core";
 import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { ActivitySection } from "@/components/activity-dock";
 import { ExamProgress } from "@/components/exam-progress";
+import { StudyTimer } from "@/components/study-timer";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
 import { BrailleSpinner } from "@/components/braille-spinner";
@@ -953,6 +954,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		<SettingsDialogProvider>
 			<SessionsSidebar />
 			<FilePathDropZone className="relative min-w-0 flex-1">{children}</FilePathDropZone>
+			{/* Study timer (fork addition): floating, bottom right. */}
+			<StudyTimer />
 			{/* The single document-level keydown listener (keyboard wave A) —
 			    after the content in the tree, but it's window-level so order only
 			    matters for the events it dispatches, never for DOM priority. */}

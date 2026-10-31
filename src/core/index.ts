@@ -89,3 +89,5 @@ export * from "./coverage.ts";
 export * from "./session-markdown.ts";
 // Exam progress (fork addition): the sidebar strip renders its result types.
 export * from "./exam-progress.ts";
+// Study timer (fork addition): the floating timer reads its constants.
+export { BEAT_MS, IDLE_ASK_MS, IDLE_PAUSE_MS, NO_SUBJECT } from "./study-timer.ts";

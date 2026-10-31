@@ -16,13 +16,16 @@
  *
  * Learning time = the gaps between consecutive recorded actions of a
  * session (message timestamps and answer times); a gap longer than
- * IDLE_GAP_MS is a pause and does not count.
+ * IDLE_GAP_MS is a pause and does not count. Where the study timer ran
+ * (src/core/study-timer.ts), its MEASURED time counts instead — per
+ * session and day the larger of the two, never the sum.
  */
 import type { ChatRecord } from "./contracts/chat.ts";
 import { derivePlanStatusesLh } from "./contracts/plan.ts";
 import type { LhMessage } from "./native-messages.ts";
 import type { DerivedGraph } from "./graph.ts";
 import type { SourceOrganization } from "./source-organization.ts";
+import { NO_SUBJECT, msByChatDay, msByDay, msBySubjectDay, type TimerPiece } from "./study-timer.ts";
 
 /** Export folder inside a brain that has a `wiki/` (Paul's layout). */
 export const BRAIN_WIKI_EXPORT_DIR = "wiki/learnharness";
@@ -40,6 +43,8 @@ export const IDLE_GAP_MS = 10 * 60 * 1000;
 export const BRAIN_SOURCE_PREFIX = "Second Brain/";
 /** "Gerade dran" = learning time within this many days before the export. */
 export const RECENT_DAYS = 14;
+/** The timer's per-subject days reach back this far in the stats. */
+export const TIMER_EXPORT_DAYS = 28;
 /** How many older topics the overview still lists. */
 const MAX_OLDER_TOPICS = 30;
 /** Below this self-reported confidence a correct answer still counts as unsure. */
@@ -145,7 +150,19 @@ function userText(m: unknown): string | null {
 	return text || null;
 }
 
-export function digestSession(record: ChatRecord, idleGapMs = IDLE_GAP_MS): SessionDigest {
+/** Measured timer time per chat and local day (ms) — see msByChatDay. */
+export type MeasuredTime = ReadonlyMap<string, ReadonlyMap<string, number>>;
+const NO_MEASURED: MeasuredTime = new Map();
+
+/** Per day the larger of estimate and measurement — never the sum. */
+function withMeasured(estimate: Map<string, number>, measured: ReadonlyMap<string, number> | undefined): Map<string, number> {
+	if (!measured?.size) return estimate;
+	const out = new Map(estimate);
+	for (const [day, ms] of measured) out.set(day, Math.max(out.get(day) ?? 0, ms));
+	return out;
+}
+
+export function digestSession(record: ChatRecord, idleGapMs = IDLE_GAP_MS, measured: MeasuredTime = NO_MEASURED): SessionDigest {
 	const practice = Object.fromEntries(PRACTICE_OUTCOMES.map((o) => [o, 0])) as Record<PracticeOutcome, number>;
 	const failedCalls = new Set<string>();
 	for (const m of record.messages) {
@@ -186,7 +203,7 @@ export function digestSession(record: ChatRecord, idleGapMs = IDLE_GAP_MS): Sess
 			else if (confidence !== undefined && confidence < LOW_CONFIDENCE) unsure.push({ question, reason: "lowConfidence", confidence });
 		}
 	}
-	const byDay = learningTimeByDay(actionTimestamps(record), idleGapMs);
+	const byDay = withMeasured(learningTimeByDay(actionTimestamps(record), idleGapMs), measured.get(record.id));
 	let learningMs = 0;
 	for (const ms of byDay.values()) learningMs += ms;
 	return {
@@ -250,12 +267,13 @@ export function summarizeTopics(
 	organization: SourceOrganization | undefined,
 	now: Date,
 	idleGapMs = IDLE_GAP_MS,
+	measured: MeasuredTime = NO_MEASURED,
 ): TopicSummary[] {
 	const since = localDay(now.getTime() - RECENT_DAYS * 24 * 60 * MINUTE);
 	const groups = new Map<string, { latest: ChatRecord; summary: TopicSummary; recentMs: number; totalMs: number }>();
 	const sorted = [...chats].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id));
 	for (const chat of sorted) {
-		const d = digestSession(chat, idleGapMs);
+		const d = digestSession(chat, idleGapMs, measured);
 		const days = [...d.learningByDay.keys()].sort();
 		const lastActive = days.at(-1) ?? localDay(Date.parse(chat.updatedAt) || 0);
 		let recentMs = 0;
@@ -326,6 +344,9 @@ export interface ExamSummary {
 	/** Learning minutes in this exam's sessions per local day (Daily takes
 	 *  the larger of this and its own timer). */
 	minutesByDay: Record<string, number>;
+	/** The same, measured by the study timer only (focus sessions plus time
+	 *  booked to the exam's name). Empty where the timer never ran. */
+	timerMinutesByDay: Record<string, number>;
 	/** Focus sessions with at least one message from Paul. */
 	started: number;
 	learningMinutes: number;
@@ -336,7 +357,10 @@ export interface ExamSummary {
 		weight: "hoch" | "mittel" | "niedrig" | null;
 		effortHours: number | null;
 		started: boolean;
+		/** Larger of estimate and measurement, per day (as everywhere). */
 		learningMinutes: number;
+		/** Measured by the study timer only, all time. */
+		timerMinutes: number;
 		openQuestions: number;
 		lastActive: string | null;
 		/** Nodes in the session's plan (0 before the agent drew one). */
@@ -355,6 +379,8 @@ export interface BrainExportInput {
 	graph: DerivedGraph;
 	organization?: SourceOrganization;
 	exams?: readonly ExamInput[];
+	/** Study-timer pieces, the running one cut at `now` (absent: none). */
+	timerPieces?: readonly TimerPiece[];
 	/** ISO time of the export; "recent" and the overview's date derive from it. */
 	now: string;
 	idleGapMs?: number;
@@ -367,7 +393,8 @@ export interface BrainExport {
 }
 
 export interface BrainStats {
-	version: 2;
+	/** 3 since the study timer (2 had no `timer` and no timer fields). */
+	version: 3;
 	generatedAt: string;
 	idleGapMinutes: number;
 	recentDays: number;
@@ -387,6 +414,9 @@ export interface BrainStats {
 	topics: TopicSummary[];
 	/** Klausur-Aufträge, nearest date first (absent: none). */
 	exams?: ExamSummary[];
+	/** Measured study-timer minutes per local day and subject (last
+	 *  TIMER_EXPORT_DAYS days; "Ohne Fach" = no subject assigned). */
+	timer: { byDay: Record<string, Record<string, number>> };
 	/** Newest first. */
 	sessions: Array<{
 		id: string;
@@ -403,14 +433,42 @@ export interface BrainStats {
 	}>;
 }
 
+/** day → minutes, ascending, days with at least one minute only. */
+function minutesRecord(byDay: ReadonlyMap<string, number>): Record<string, number> {
+	return Object.fromEntries([...byDay].sort(([a], [b]) => a.localeCompare(b)).map(([k, ms]) => [k, minutes(ms)] as const).filter(([, m]) => m > 0));
+}
+
+/** Measured minutes per day and subject, days on or after `since`. */
+export function timerByDay(pieces: readonly TimerPiece[], since: string): BrainStats["timer"]["byDay"] {
+	const out: BrainStats["timer"]["byDay"] = {};
+	for (const [day, subjects] of [...msBySubjectDay(pieces, since)].sort(([a], [b]) => a.localeCompare(b))) {
+		const row: Record<string, number> = {};
+		for (const [subject, ms] of [...subjects].sort(([a], [b]) => a.localeCompare(b))) if (minutes(ms) > 0) row[subject || NO_SUBJECT] = minutes(ms);
+		if (Object.keys(row).length) out[day] = row;
+	}
+	return out;
+}
+
 /** Progress of each exam plan, from its focus sessions. */
-export function summarizeExams(exams: readonly ExamInput[], chats: readonly ChatRecord[], idleGapMs = IDLE_GAP_MS): ExamSummary[] {
+export function summarizeExams(
+	exams: readonly ExamInput[],
+	chats: readonly ChatRecord[],
+	idleGapMs = IDLE_GAP_MS,
+	timerPieces: readonly TimerPiece[] = [],
+): ExamSummary[] {
 	const byId = new Map(chats.map((c) => [c.id, c]));
+	const measured = msByChatDay(timerPieces);
 	return exams.map((e) => {
 		const byDay = new Map<string, number>();
+		const focusIds = new Set(e.focuses.map((f) => f.chatId));
+		// The exam's measured time: its focus sessions, plus anything Paul
+		// booked to the exam's name from another chat.
+		const timerByDay = msByDay(timerPieces, (p) => (p.chatId !== null && focusIds.has(p.chatId)) || p.subject === e.exam);
 		const focuses = e.focuses.map((f) => {
 			const chat = byId.get(f.chatId);
-			const d = chat ? digestSession(chat, idleGapMs) : null;
+			const d = chat ? digestSession(chat, idleGapMs, measured) : null;
+			let timerMs = 0;
+			for (const ms of measured.get(f.chatId)?.values() ?? []) timerMs += ms;
 			for (const [dayKey, ms] of d?.learningByDay ?? []) byDay.set(dayKey, (byDay.get(dayKey) ?? 0) + ms);
 			const started = !!chat && chat.messages.some((m) => (m as { role?: unknown }).role === "user");
 			const tree = chat?.tree;
@@ -432,6 +490,7 @@ export function summarizeExams(exams: readonly ExamInput[], chats: readonly Chat
 				understanding: understanding === null ? null : round2(understanding),
 				done: round2(progress * (understanding ?? 1)),
 				learningMinutes: d ? minutes(d.learningMs) : 0,
+				timerMinutes: minutes(timerMs),
 				openQuestions: d ? d.unsure.length : 0,
 				lastActive: d ? ([...d.learningByDay.keys()].sort().at(-1) ?? null) : null,
 			};
@@ -443,7 +502,10 @@ export function summarizeExams(exams: readonly ExamInput[], chats: readonly Chat
 			reviewFrom: e.reviewFrom ?? null,
 			planStart: e.planStart ?? null,
 			total: focuses.length,
-			minutesByDay: Object.fromEntries([...byDay].sort(([a], [b]) => a.localeCompare(b)).map(([k, ms]) => [k, minutes(ms)]).filter(([, m]) => (m as number) > 0)),
+			// Sessions already carry max(estimate, measured) per day; time
+			// booked to the exam from elsewhere can only raise a day further.
+			minutesByDay: minutesRecord(withMeasured(byDay, timerByDay)),
+			timerMinutesByDay: minutesRecord(timerByDay),
 			started: focuses.filter((f) => f.started).length,
 			learningMinutes: focuses.reduce((sum, f) => sum + f.learningMinutes, 0),
 			openQuestions: focuses.reduce((sum, f) => sum + f.openQuestions, 0),
@@ -535,6 +597,8 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 	const now = new Date(input.now);
 	const since = localDay(now.getTime() - RECENT_DAYS * 24 * 60 * MINUTE);
 	const chats = [...input.chats].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+	const timerPieces = input.timerPieces ?? [];
+	const measured = msByChatDay(timerPieces);
 
 	const dayTotals = new Map<string, { ms: number; sessions: Set<string> }>();
 	const sessionRows: BrainStats["sessions"] = [];
@@ -544,7 +608,7 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 	let totalGraded = 0;
 	let totalCorrect = 0;
 	for (const chat of chats) {
-		const d = digestSession(chat, idleGapMs);
+		const d = digestSession(chat, idleGapMs, measured);
 		totalMs += d.learningMs;
 		totalQuestions += d.questions;
 		totalGraded += d.graded;
@@ -572,7 +636,7 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 	}
 
 	const stats: BrainStats = {
-		version: 2,
+		version: 3,
 		generatedAt: input.now,
 		idleGapMinutes: minutes(idleGapMs),
 		recentDays: RECENT_DAYS,
@@ -589,8 +653,9 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 		days: [...dayTotals.entries()]
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([date, t]) => ({ date, learningMinutes: minutes(t.ms), sessions: t.sessions.size })),
-		topics: summarizeTopics(chats, input.organization, now, idleGapMs),
-		...(input.exams?.length ? { exams: summarizeExams(input.exams, chats, idleGapMs) } : {}),
+		topics: summarizeTopics(chats, input.organization, now, idleGapMs, measured),
+		...(input.exams?.length ? { exams: summarizeExams(input.exams, chats, idleGapMs, timerPieces) } : {}),
+		timer: { byDay: timerByDay(timerPieces, localDay(now.getTime() - (TIMER_EXPORT_DAYS - 1) * 24 * 60 * MINUTE)) },
 		sessions: sessionRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
 	};
 	const files = new Map<string, string>([

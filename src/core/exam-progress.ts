@@ -15,6 +15,14 @@
  *
  * Understanding is shown on its own (effort-weighted share of right
  * answers): covering ground fast but retaining little must stay visible.
+ *
+ * PACE THAT LEARNS (Daily's src/lib/lernTempo.ts, ported 1:1 so the strip
+ * and Daily name the same number): the rest of a focus with progress runs
+ * at ITS measured pace (minutes ÷ share done), blended with the estimate
+ * while little is done; untouched focuses run at the subject's pace. A
+ * part planned at 30 min that takes an hour makes the plan longer. Minutes
+ * are the export's learningMinutes — measured by the study timer where it
+ * ran, else estimated from message times.
  */
 
 import type { ExamSummary } from "./brain-export.ts";
@@ -65,7 +73,11 @@ export type ExamProgress =
 			/** Study days until revision (study) or until the exam (revision). */
 			daysLeft: number;
 			totalHours: number;
+			/** Hours left at Paul's pace (restMinutesFocus summed). */
 			restHours: number;
+			/** Actual ÷ planned for this subject (else across all exams);
+			 *  null until two focuses are measurably along. */
+			pace: number | null;
 			/** 0…1 of the planned effort behind him. */
 			ist: number;
 			/** 0…1 where the straight line says he should be this morning. */
@@ -75,8 +87,10 @@ export type ExamProgress =
 			standing: Standing;
 			/** Effort-weighted share of right answers; null before any is graded. */
 			understanding: number | null;
-			/** Today's target in minutes, rounded up to 15. */
+			/** Today's target in minutes at Paul's pace, rounded up to 15. */
 			targetToday: number;
+			/** The same by the plan's effort alone — for comparison. */
+			planTargetToday: number;
 			minutesToday: number;
 			leftToday: number;
 			targetWeek: number;
@@ -96,16 +110,54 @@ export interface ProgressInput {
 	today: string;
 	minutesToday: number;
 	minutesWeek: number;
+	/** Every focus of every exam: the fallback pace when this exam has
+	 *  too little measured yet (Daily does the same). */
+	allFocuses?: readonly PaceFocus[];
 }
 
-/** Remaining effort of a focus, in hours. */
+// ─── Pace (port of Daily's lernTempo.ts: tempo, restMinutenFokus) ─────────
+const PACE_MIN_DONE = 0.25;
+const PACE_MIN_MINUTES = 30;
+const PACE_MIN_FOCUSES = 2;
+const OWN_PACE_FROM = { done: 0.15, minutes: 20 };
+const SURCHARGE_PER_QUESTION_MIN = 15;
+const SURCHARGE_MAX_MIN = 120;
+
+type PaceFocus = Pick<Focus, "effortHours" | "done" | "learningMinutes">;
+
+/** Actual ÷ planned over focuses far enough along (≥ 25 %, ≥ 30 min; at
+ *  least two of them), 0.5…3. null = not measured enough yet. */
+export function paceFactor(focuses: readonly PaceFocus[]): number | null {
+	const measurable = focuses.filter((f) => f.done >= PACE_MIN_DONE && f.learningMinutes >= PACE_MIN_MINUTES);
+	if (measurable.length < PACE_MIN_FOCUSES) return null;
+	const actual = measurable.reduce((s, f) => s + f.learningMinutes / Math.min(1, f.done), 0);
+	const planned = measurable.reduce((s, f) => s + (f.effortHours ?? DEFAULT_EFFORT_H) * 60, 0);
+	return Math.round(Math.min(3, Math.max(0.5, actual / planned)) * 100) / 100;
+}
+
+/** Minutes a focus still needs at Paul's pace (its own once it has
+ *  progress, blended with the estimate until half done), plus open questions. */
+export function restMinutesFocus(f: Focus, factor: number | null): number {
+	const surcharge = Math.min(f.openQuestions * SURCHARGE_PER_QUESTION_MIN, SURCHARGE_MAX_MIN);
+	if (isFinished(f)) return 0;
+	const estimated = (f.effortHours ?? DEFAULT_EFFORT_H) * 60 * (factor ?? 1);
+	let perWhole = estimated;
+	if (f.done >= OWN_PACE_FROM.done && f.learningMinutes >= OWN_PACE_FROM.minutes) {
+		const own = f.learningMinutes / Math.min(1, f.done);
+		const w = Math.min(1, f.done / 0.5);
+		perWhole = w * own + (1 - w) * estimated;
+	}
+	return Math.round(perWhole * Math.max(0, 1 - f.done) + surcharge);
+}
+
+/** Remaining effort of a focus by the plan alone (no pace), in hours. */
 export function restHours(f: Focus): number {
 	const effort = f.effortHours ?? DEFAULT_EFFORT_H;
 	const surcharge = Math.min(f.openQuestions * SURCHARGE_PER_QUESTION_H, SURCHARGE_MAX_H);
 	return effort * (1 - f.done) + surcharge;
 }
 
-export const isFinished = (f: Focus) => f.done >= FINISHED_AT && f.openQuestions === 0;
+export const isFinished = (f: Pick<Focus, "done" | "openQuestions">) => f.done >= FINISHED_AT && f.openQuestions === 0;
 
 /** Study phase: started, unfinished focuses first, then the plan's order. */
 function studyOrder<T extends Focus>(focuses: T[]): T[] {
@@ -119,12 +171,12 @@ function revisionOrder<T extends Focus>(focuses: T[]): T[] {
 	return [...focuses].sort((a, b) => shaky(b) - shaky(a));
 }
 
-function distribute(order: Array<Focus & { chatId?: string }>, budget: number, revision: boolean): TodayFocus[] {
+function distribute(order: Array<Focus & { chatId?: string }>, budget: number, revision: boolean, factor: number | null): TodayFocus[] {
 	const out: TodayFocus[] = [];
 	let rest = budget;
 	for (const f of order) {
 		if (rest < MIN_BLOCK_MIN || out.length >= MAX_FOCUSES_TODAY) break;
-		const need = revision ? rest : Math.max(MIN_BLOCK_MIN, to15(restHours(f) * 60));
+		const need = revision ? rest : Math.max(MIN_BLOCK_MIN, to15(restMinutesFocus(f, factor)));
 		const minutes = Math.min(need, to15(rest));
 		out.push({ title: f.title, ...(f.chatId ? { chatId: f.chatId } : {}), minutes, review: revision || f.openQuestions >= REVIEW_AT_QUESTIONS });
 		rest -= minutes;
@@ -140,7 +192,7 @@ export function standingOf(deltaHours: number, totalHours: number): Standing {
 	return "far-behind";
 }
 
-export function examProgress({ exam, planStart, today, minutesToday, minutesWeek }: ProgressInput): ExamProgress {
+export function examProgress({ exam, planStart, today, minutesToday, minutesWeek, allFocuses }: ProgressInput): ExamProgress {
 	if (!exam.date) return { exam: exam.exam, phase: "no-date" };
 	const daysToExam = daysBetween(today, exam.date);
 	if (daysToExam < 0) return { exam: exam.exam, phase: "over" };
@@ -150,7 +202,9 @@ export function examProgress({ exam, planStart, today, minutesToday, minutesWeek
 	const plannedPerDay = (hoursPerWeek * 60) / 7;
 	const effort = (f: Focus) => f.effortHours ?? DEFAULT_EFFORT_H;
 	const total = exam.focuses.reduce((s, f) => s + effort(f), 0);
-	const rest = exam.focuses.reduce((s, f) => s + restHours(f), 0);
+	const planRest = exam.focuses.reduce((s, f) => s + restHours(f), 0);
+	const pace = paceFactor(exam.focuses) ?? paceFactor(allFocuses ?? []);
+	const paceRestMin = exam.focuses.reduce((s, f) => s + restMinutesFocus(f, pace), 0);
 	const ist = total > 0 ? exam.focuses.reduce((s, f) => s + effort(f) * f.done, 0) / total : 0;
 
 	// The line runs from the plan's start to the first revision day.
@@ -165,15 +219,19 @@ export function examProgress({ exam, planStart, today, minutesToday, minutesWeek
 
 	const study = today < reviewFrom;
 	let targetToday: number;
+	let planTargetToday: number;
 	let daysLeft: number;
 	if (study) {
 		daysLeft = Math.max(1, daysBetween(today, reviewFrom));
 		// Today's minutes count back into the rest, or the target would
 		// shrink twice (once via progress, once via the clock).
-		targetToday = to15((rest * 60 + minutesToday) / daysLeft);
+		targetToday = to15((paceRestMin + minutesToday) / daysLeft);
+		planTargetToday = to15((planRest * 60 + minutesToday) / daysLeft);
 	} else {
+		// Revision: the plan's own measure — nothing new is projected.
 		daysLeft = Math.max(1, daysToExam);
 		targetToday = to15(plannedPerDay);
+		planTargetToday = targetToday;
 	}
 	const leftToday = Math.max(0, targetToday - minutesToday);
 	const order = study ? studyOrder(exam.focuses) : revisionOrder(exam.focuses);
@@ -185,19 +243,21 @@ export function examProgress({ exam, planStart, today, minutesToday, minutesWeek
 		daysToExam,
 		daysLeft,
 		totalHours: round1(total),
-		restHours: round1(rest),
+		restHours: round1(paceRestMin / 60),
+		pace,
 		ist: round2(ist),
 		soll: round2(soll),
 		deltaHours: round1(deltaHours),
 		standing: standingOf(deltaHours, total),
 		understanding: understanding === null ? null : round2(understanding),
 		targetToday,
+		planTargetToday,
 		minutesToday,
 		leftToday,
 		targetWeek: Math.round(hoursPerWeek * 60),
 		minutesWeek,
 		plannedPerDay: Math.round(plannedPerDay),
-		upNext: distribute(order, leftToday, !study),
+		upNext: distribute(order, leftToday, !study, pace),
 		focusesDone: exam.focuses.filter(isFinished).length,
 		focusesTotal: exam.focuses.length,
 	};

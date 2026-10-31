@@ -20,6 +20,7 @@ Press **?** outside a text field for the in-app cheat sheet.
 | Toggle all your thinking in the session | Mod+T |
 | Find in session / search graph or chains view | Mod+F |
 | Shortcut cheat sheet | ? |
+| Start / pause study timer (fork) | Mod+Shift+T |
 
 Surface-specific actions require their surface to be mounted. Bare shortcuts
 such as **?** and **F2** do not fire while typing; modifier shortcuts still do.

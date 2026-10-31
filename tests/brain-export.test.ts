@@ -138,7 +138,7 @@ describe("buildBrainExport", () => {
 
 	it("produces dashboard stats consistent with the digests", () => {
 		const stats = JSON.parse(out.files.get("learnharness-stats.json")!);
-		assert.equal(stats.version, 2);
+		assert.equal(stats.version, 3);
 		assert.equal(stats.generatedAt, now);
 		assert.equal(stats.idleGapMinutes, 10);
 		assert.equal(stats.recentDays, 14);
@@ -155,5 +155,61 @@ describe("buildBrainExport", () => {
 	it("is deterministic for the same input", () => {
 		const again = buildBrainExport({ chats: [OTHER, TEACH], graph, now });
 		assert.deepEqual([...again.files.entries()].sort(), [...out.files.entries()].sort());
+	});
+});
+
+describe("study timer in the export (version 3)", () => {
+	const graph = { nodes: [], chains: [] };
+	const actions = TEACH.messages.map((m) => (m as { timestamp?: number }).timestamp ?? 0).filter((t) => t > 0);
+	const first = Math.min(...actions);
+	const day = localDay(first);
+	const estimateMin = Math.round((digestSession(TEACH).learningByDay.get(day) ?? 0) / MIN);
+	const now = new Date(Math.max(...actions) + 60 * MIN).toISOString();
+	const exams = [{ exam: "FODS Theorie", date: "2099-01-01", focuses: [{ title: "Teach", weight: null, chatId: TEACH.id }] }];
+	const run = (pieces: Array<{ subject: string | null; chatId: string | null; start: number; end: number }>) =>
+		JSON.parse(buildBrainExport({ chats: [TEACH, OTHER], graph, exams, timerPieces: pieces, now }).files.get("learnharness-stats.json")!);
+
+	it("takes the measured time where it is larger, per session and day", () => {
+		const long = (estimateMin + 45) * MIN;
+		const stats = run([{ subject: "FODS Theorie", chatId: TEACH.id, start: first, end: first + long }]);
+		const row = stats.sessions.find((s: { id: string }) => s.id === TEACH.id);
+		assert.equal(row.learningMinutes, Math.round(long / MIN));
+		const [exam] = stats.exams;
+		assert.equal(exam.minutesByDay[day], Math.round(long / MIN));
+		assert.equal(exam.timerMinutesByDay[day], Math.round(long / MIN));
+		assert.equal(exam.focuses[0].timerMinutes, Math.round(long / MIN));
+		assert.equal(exam.focuses[0].learningMinutes, Math.round(long / MIN));
+	});
+
+	it("keeps the estimate where the timer measured less — never the sum", () => {
+		const stats = run([{ subject: "FODS Theorie", chatId: TEACH.id, start: first, end: first + MIN }]);
+		const row = stats.sessions.find((s: { id: string }) => s.id === TEACH.id);
+		assert.equal(row.learningMinutes, Math.round(digestSession(TEACH).learningMs / MIN));
+		assert.equal(stats.exams[0].focuses[0].timerMinutes, 1);
+		assert.equal(stats.exams[0].minutesByDay[day], Math.max(estimateMin, 1));
+	});
+
+	it("lists measured minutes per day and subject, unassigned time under Ohne Fach", () => {
+		const stats = run([
+			{ subject: "FODS Theorie", chatId: TEACH.id, start: first, end: first + 30 * MIN },
+			{ subject: null, chatId: OTHER.id, start: first + 30 * MIN, end: first + 40 * MIN },
+			{ subject: "Statistik", chatId: null, start: first - 400 * 24 * 60 * MIN, end: first - 400 * 24 * 60 * MIN + 30 * MIN },
+		]);
+		assert.deepEqual(stats.timer.byDay[day], { "FODS Theorie": 30, "Ohne Fach": 10 });
+		assert.equal(Object.keys(stats.timer.byDay).length, 1, "older than 28 days is left out");
+	});
+
+	it("time booked to the exam's name from another chat counts for the exam", () => {
+		const stats = run([{ subject: "FODS Theorie", chatId: OTHER.id, start: first, end: first + (estimateMin + 20) * MIN }]);
+		assert.equal(stats.exams[0].timerMinutesByDay[day], estimateMin + 20);
+		assert.equal(stats.exams[0].minutesByDay[day], estimateMin + 20);
+		assert.equal(stats.exams[0].focuses[0].timerMinutes, 0, "not this focus's time");
+	});
+
+	it("without a timer the old fields are unchanged and timer.byDay is empty", () => {
+		const stats = JSON.parse(buildBrainExport({ chats: [TEACH, OTHER], graph, exams, now }).files.get("learnharness-stats.json")!);
+		assert.deepEqual(stats.timer, { byDay: {} });
+		assert.equal(stats.exams[0].minutesByDay[day], estimateMin || undefined);
+		assert.deepEqual(stats.exams[0].timerMinutesByDay, {});
 	});
 });

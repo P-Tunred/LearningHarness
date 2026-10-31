@@ -84,7 +84,7 @@ describe("brain sync", () => {
 		assert.ok(fs.existsSync(path.join(INBOX, "leer.md")), "an empty file stays where it is");
 		assert.deepEqual(fs.readdirSync(EXPORT).sort(), [".learnharness-export.json", "learnharness-stats.json", "lernstand.md"]);
 		const stats = JSON.parse(fs.readFileSync(path.join(EXPORT, "learnharness-stats.json"), "utf-8"));
-		assert.equal(stats.version, 2);
+		assert.equal(stats.version, 3);
 		assert.equal(stats.totals.sessions, 2);
 		assert.ok(fs.existsSync(BRAIN_SYNC_STATE_FILE), "bookkeeping lives in the data dir");
 		assert.ok(!fs.existsSync(path.join(BRAIN, "brain-sync.json")), "never in the brain");

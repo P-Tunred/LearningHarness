@@ -32,6 +32,8 @@ import {
 	summarizeExams,
 } from "../core/brain-export.ts";
 import { examProgress, minutesTodayAndWeek, type ExamProgress } from "../core/exam-progress.ts";
+import { allPieces, settle } from "../core/study-timer.ts";
+import { readTimerState } from "./study-timer.ts";
 import type { ChatRecord } from "../core/contracts/chat.ts";
 import { emit, subscribe } from "../core/events.ts";
 import { getGraph } from "../core/graph.ts";
@@ -83,6 +85,13 @@ function runtime() {
 	return g.__lhBrain;
 }
 
+/** The study timer's pieces, a run that missed its beats settled, the
+ *  running piece cut at `now` (read-only: settling is persisted by the
+ *  timer's own reads, not by the export). */
+function timerPiecesAt(now: number) {
+	return allPieces(settle(readTimerState(), now), now);
+}
+
 /** Where Paul stands on each exam plan right now (the sidebar's progress
  *  strip). Empty without a usable brain folder or without plans. */
 export function examProgressNow(now = new Date()): ExamProgress[] {
@@ -92,9 +101,11 @@ export function examProgressNow(now = new Date()): ExamProgress[] {
 	const overviews = examOverviews(root);
 	if (overviews.length === 0) return [];
 	const today = localDay(now.getTime());
-	return summarizeExams(overviews, readAllChats()).map((exam) => {
+	const exams = summarizeExams(overviews, readAllChats(), undefined, timerPiecesAt(now.getTime()));
+	const allFocuses = exams.flatMap((e) => e.focuses);
+	return exams.map((exam) => {
 		const minutes = minutesTodayAndWeek(exam.minutesByDay, today);
-		return examProgress({ exam, planStart: exam.planStart, today, minutesToday: minutes.today, minutesWeek: minutes.week });
+		return examProgress({ exam, planStart: exam.planStart, today, minutesToday: minutes.today, minutesWeek: minutes.week, allFocuses });
 	});
 }
 
@@ -166,6 +177,7 @@ export function exportToBrain(brainRoot: string, now = new Date()): ExportResult
 		graph: getGraph(stores.graphStore),
 		organization: stores.sourceOrganizationStore.read(),
 		exams: examOverviews(brainRoot),
+		timerPieces: timerPiecesAt(now.getTime()),
 		now: now.toISOString(),
 	});
 	const previous = readManifest(exportDir);
@@ -413,6 +425,8 @@ export function startBrainSync(options: { force?: boolean } = {}): Promise<void>
 	if (!rt.unsubscribe) {
 		rt.unsubscribe = subscribe((event) => {
 			if (event.type === "turn-settled" || event.type === "chats-changed" || event.type === "record-changed") scheduleExport();
+			// Study timer paused or switched: the measured time goes out too.
+			if (event.type === "study-timer-changed") scheduleExport();
 			// Extraction runs (graph writes) announce themselves as activity
 			// changes; during the start-up import the final export covers them.
 			if ((event.type === "sources-changed" || event.type === "activity-changed") && runtime().status.phase !== "importing") scheduleExport();

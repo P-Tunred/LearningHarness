@@ -57,3 +57,5 @@ export { customProviderGet, customProviderMutation } from "./custom-provider-htt
 // Second Brain link (fork addition): export to / import from a Markdown folder.
 export { brainStatus, examProgressNow, startBrainSync, type BrainStatus } from "./brain.ts";
 export { examOpeningPrompt } from "./exam-plans.ts";
+// Study timer (fork addition): measured learning time per subject.
+export { TimerActionError, parseTimerAction, studyTimerAction, studyTimerView, type TimerView } from "./study-timer.ts";
