@@ -241,7 +241,7 @@ describe("SETTINGS_SECTIONS (the route's section map)", () => {
 		// connected through POST /api/custom-provider.
 		assert.deepEqual(
 			Object.keys(SETTINGS_SECTIONS),
-			["general", "chat", "agent", "appearance", "graph", "compaction", "models", "dictation", "claudeCode"],
+			["general", "chat", "agent", "appearance", "graph", "compaction", "models", "dictation", "claudeCode", "brain"],
 		);
 	});
 });
@@ -289,5 +289,23 @@ describe("parseModelsSettingsBody (model slots wave, 2026-09-20)", () => {
 		assert.equal(parseModelsSettingsBody({ cheap: { model: { provider: "x" } } }).ok, false);
 		assert.equal(parseModelsSettingsBody({ vision: { thinkingLevel: 7 } }).ok, false);
 		assert.equal(parseModelsSettingsBody("nope").ok, false);
+	});
+});
+
+describe("parseBrainSettingsBody (fork addition)", () => {
+	it("accepts absolute and ~/ folders, null clears, rejects relative or multi-line paths", async () => {
+		const { parseBrainSettingsBody } = await import("../src/server/settings-body.ts");
+		const { sanitizeUserSettings } = await import("../src/core/settings.ts");
+		const abs = parseBrainSettingsBody({ folder: "/Users/me/Brain" });
+		assert.ok(abs.ok && abs.settings.folder === "/Users/me/Brain");
+		const home = parseBrainSettingsBody({ folder: "~/Library/CloudStorage/GoogleDrive-x/Meine Ablage/Brain" });
+		assert.ok(home.ok);
+		const cleared = parseBrainSettingsBody({ folder: null });
+		assert.ok(cleared.ok && cleared.settings.folder === null);
+		for (const bad of ["Brain", "./Brain", "/a\nb", 42, ""]) {
+			assert.equal(parseBrainSettingsBody({ folder: bad }).ok, false, JSON.stringify(bad));
+		}
+		assert.deepEqual(sanitizeUserSettings({ version: 1, brain: { folder: "relative" } })?.brain, {});
+		assert.deepEqual(sanitizeUserSettings({ version: 1, brain: { folder: "/ok" } })?.brain, { folder: "/ok" });
 	});
 });

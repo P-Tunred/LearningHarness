@@ -17,6 +17,7 @@ import type {
 	AgentSettings,
 	AppearanceSettings,
 	BackgroundModelRole,
+	BrainSettings,
 	CompactionSettings,
 	CustomModelOverride,
 	GeneralSettings,
@@ -26,7 +27,7 @@ import type {
 	ModelSlot,
 	RoleModelOverride,
 } from "../core/settings.ts";
-import { BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS, WINDOW_OPACITY_MAX, WINDOW_OPACITY_MIN } from "../core/settings.ts";
+import { BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS, WINDOW_OPACITY_MAX, WINDOW_OPACITY_MIN, isBrainFolder } from "../core/settings.ts";
 import { WRITABLE_TOOL_KEYS } from "../core/pending.ts";
 import { isDictationLanguage } from "../core/dictation.ts";
 
@@ -458,6 +459,17 @@ export function parseCustomModelOverridesBody(
 	return { ok: true, settings: out };
 }
 
+/** brain: { folder?: absolute-or-"~/" path | null } (fork addition). */
+export function parseBrainSettingsBody(body: unknown): SettingsBodyResult<BrainSettings> {
+	const raw = asRecord(body);
+	if (!raw) return { ok: false, error: "Invalid JSON body" };
+	if (raw.folder === undefined || raw.folder === null) return { ok: true, settings: raw.folder === null ? { folder: null } : {} };
+	if (!isBrainFolder(raw.folder)) {
+		return { ok: false, error: "folder must be an absolute path (or start with ~/)" };
+	}
+	return { ok: true, settings: { folder: raw.folder } };
+}
+
 /** The section→parser map for PUT /api/settings/[section]. The custom endpoint
  *  is NOT a section — it connects via POST /api/custom-provider. */
 export const SETTINGS_SECTIONS = {
@@ -470,6 +482,7 @@ export const SETTINGS_SECTIONS = {
 	models: parseModelsSettingsBody,
 	dictation: parseDictationSettingsBody,
 	claudeCode: parseClaudeCodeSettingsBody,
+	brain: parseBrainSettingsBody,
 } as const;
 
 export type SettingsSectionName = keyof typeof SETTINGS_SECTIONS;

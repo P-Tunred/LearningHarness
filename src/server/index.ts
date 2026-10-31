@@ -54,3 +54,5 @@ export { claudeCodeInstallationResponse } from "./claude-code.ts";
 // No import side effects; the boot sync lives in stores.ts.
 export * from "./custom-provider.ts";
 export { customProviderGet, customProviderMutation } from "./custom-provider-http.ts";
+// Second Brain link (fork addition): export to / import from a Markdown folder.
+export { brainStatus, startBrainSync, type BrainStatus } from "./brain.ts";

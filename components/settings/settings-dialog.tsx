@@ -36,6 +36,7 @@ import {
 	type AgentSettings,
 	type AppearanceSettings,
 	type CompactionSettings,
+	type BrainSettings,
 	type GraphSettings,
 	type UserSettings,
 } from "@/src/core";
@@ -50,6 +51,7 @@ import { KeysSection } from "./keys-section.tsx";
 import { Hint } from "@/components/ui/hint";
 import { AppearanceSection, GraphSection } from "./appearance-section.tsx";
 import { KeyboardSection } from "./keyboard-section.tsx";
+import { BrainSection } from "./brain-section.tsx";
 import { ChatGPTUIProvider } from "./chatgpt-connection.tsx";
 import { NativeSubscriptionUIProvider } from "./subscription-connections.tsx";
 
@@ -61,6 +63,7 @@ const SECTIONS = [
 	{ id: "agent", label: "Agent" },
 	{ id: "appearance", label: "Appearance" },
 	{ id: "graph", label: "Graph" },
+	{ id: "brain", label: "Second Brain" },
 	{ id: "keyboard", label: "Keyboard", hint: "Stored on this device" },
 	{ id: "general", label: "General" },
 ] as const;
@@ -226,7 +229,7 @@ export function SettingsDialogBody({
 	 *  schema mistake caught by the validation surface). */
 	const write = useCallback(
 		async (
-			section: "general" | "agent" | "models" | "appearance" | "graph" | "compaction",
+			section: "general" | "agent" | "models" | "appearance" | "graph" | "compaction" | "brain",
 			body: object,
 		) => {
 			setError(null);
@@ -418,6 +421,17 @@ export function SettingsDialogBody({
 										onSectionChange={(next: GraphSettings) =>
 											void write("graph", next)
 										}
+									/>
+								</SettingsSection>
+							)}
+							{active === "brain" && (
+								<SettingsSection
+									title="Second Brain"
+									testid="section-brain"
+								>
+									<BrainSection
+										brain={record.brain}
+										onSectionChange={(next: BrainSettings) => write("brain", next)}
 									/>
 								</SettingsSection>
 							)}

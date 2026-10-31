@@ -330,6 +330,27 @@ export const ROLE_SLOT: Readonly<Record<ModelRole, ModelSlotName>> = {
 
 /** General settings — app-level behavior. Version DISPLAY and plans login
  *  live outside the record (package.json / auth.json) by owner decision. */
+/** Second Brain link (fork addition): a folder of Markdown notes (e.g. an
+ *  Obsidian vault synced by Google Drive for desktop). When set, LearnHarness
+ *  exports what was learned into `<folder>/LearnHarness/` and imports the
+ *  folder's other .md notes at app start. Absent/null = feature off. */
+export interface BrainSettings {
+	/** Absolute path (a leading "~/" means the home directory). */
+	folder?: string | null;
+}
+
+/** Bound for a stored brain folder path (characters). */
+export const BRAIN_FOLDER_MAX_LENGTH = 1024;
+
+/** A stored brain folder: absolute or home-relative, single line, bounded. */
+export function isBrainFolder(value: unknown): value is string {
+	return typeof value === "string"
+		&& value.length > 0
+		&& value.length <= BRAIN_FOLDER_MAX_LENGTH
+		&& !/[\r\n\0]/.test(value)
+		&& (value.startsWith("/") || value.startsWith("~/"));
+}
+
 export interface GeneralSettings {
 	/** Automatic startup/24h update checks (default ON). Manual checks bypass this. */
 	autoUpdate?: boolean;
@@ -482,6 +503,7 @@ export interface UserSettings {
 	appearance?: AppearanceSettings;
 	graph?: GraphSettings;
 	compaction?: CompactionSettings;
+	brain?: BrainSettings;
 	[key: string]: unknown;
 }
 
@@ -819,6 +841,11 @@ export function sanitizeUserSettings(raw: unknown): UserSettings | null {
 	};
 	if (r.general !== null && typeof r.general === "object" && !Array.isArray(r.general)) {
 		out.general = sanitizeGeneral(r.general as Record<string, unknown>);
+	}
+	if (r.brain !== undefined) {
+		const folder = r.brain !== null && typeof r.brain === "object" && !Array.isArray(r.brain)
+			? (r.brain as Record<string, unknown>).folder : undefined;
+		out.brain = isBrainFolder(folder) ? { folder } : {};
 	}
 	if (r.dictation !== undefined) {
 		const raw = r.dictation;

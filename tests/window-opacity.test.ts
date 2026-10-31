@@ -62,6 +62,6 @@ describe("windowOpacity persistence", () => {
 		const junk = sanitizeUserSettings({ appearance: { windowOpacity: "x" } });
 		assert.equal(junk?.appearance?.windowOpacity, undefined);
 		assert.equal(resolveSettings(null).appearance.windowOpacity, 100);
-		assert.equal(resolveSettings({ appearance: { windowOpacity: 70 } }).appearance.windowOpacity, 70);
+		assert.equal(resolveSettings({ version: 1, appearance: { windowOpacity: 70 } }).appearance.windowOpacity, 70);
 	});
 });
