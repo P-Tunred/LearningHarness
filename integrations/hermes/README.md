@@ -40,6 +40,13 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8646:127.0.0.1:8646 root@<server
 Den Hermes-Login nie auf den Mac kopieren: der ChatGPT-Login erneuert sich
 laufend, zwei Kopien machen sich gegenseitig ungültig.
 
+**Einrichtung auf dem Server mit automatischen Updates** (im Server-Terminal,
+nach dem Klonen mit einem Deploy key): `bash ~/LearningHarness/integrations/hermes/server-setup.sh`.
+Es stellt den Dienst auf den gemeinsamen Proxy um und richtet
+`learnharness-update.timer` ein: stündlich `git pull`; nur wenn sich
+`integrations/hermes` geändert hat, laufen die Tests, und der Dienst startet
+neu. Schlagen die Tests fehl, wird zurückgerollt und der alte Proxy läuft weiter.
+
 ## Einrichten
 
 1. In Hermes eingerichtet sein muss:
