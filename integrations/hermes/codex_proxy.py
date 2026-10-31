@@ -37,8 +37,6 @@ except ImportError:  # pragma: no cover - depends on the user's install
     sys.exit("Hermes' proxy needs aiohttp. Run `hermes setup` (or install aiohttp into Hermes' Python).")
 
 try:
-    from agent.codex_headers import codex_cloudflare_headers
-    from hermes_cli.auth_codex import resolve_codex_runtime_credentials
     from hermes_cli.codex_models import get_codex_model_ids
     from hermes_cli.env_loader import load_hermes_dotenv
 except ImportError as exc:  # pragma: no cover - depends on the user's install
@@ -46,6 +44,15 @@ except ImportError as exc:  # pragma: no cover - depends on the user's install
         "Hermes Agent was not found in this Python environment "
         f"({exc}). Start this file with Hermes' own Python, e.g. via start-codex-proxy.sh."
     )
+# Hermes moves these helpers between releases; resolve them defensively.
+try:
+    from hermes_cli.auth_codex import resolve_codex_runtime_credentials
+except ImportError:  # pragma: no cover - older Hermes
+    from hermes_cli.auth import resolve_codex_runtime_credentials  # type: ignore[no-redef]
+try:
+    from agent.codex_headers import codex_cloudflare_headers
+except ImportError:  # pragma: no cover - older Hermes
+    codex_cloudflare_headers = None  # type: ignore[assignment]
 
 try:  # ``-900k`` picker variants are Hermes-side aliases; the backend knows only the base slug.
     from agent.model_metadata import strip_codex_context_variant_suffix as wire_model
@@ -65,7 +72,10 @@ DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
 
 def codex_credentials(force_refresh: bool = False) -> tuple[str, str]:
     """(access_token, base_url) from Hermes' Codex token store; refreshed when expiring."""
-    creds = resolve_codex_runtime_credentials(force_refresh=force_refresh)
+    try:
+        creds = resolve_codex_runtime_credentials(force_refresh=force_refresh)
+    except TypeError:  # pragma: no cover - a Hermes without the keyword
+        creds = resolve_codex_runtime_credentials()
     token = str(creds.get("api_key") or "").strip()
     base_url = str(creds.get("base_url") or "").strip().rstrip("/")
     if not token or not base_url:
@@ -73,13 +83,104 @@ def codex_credentials(force_refresh: bool = False) -> tuple[str, str]:
     return token, base_url
 
 
+def _account_headers(token: str) -> dict[str, str]:
+    """ChatGPT-Account-ID from the OAuth JWT (fallback when Hermes has no header helper)."""
+    import base64
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        account = (claims.get("https://api.openai.com/auth") or {}).get("chatgpt_account_id")
+        return {"ChatGPT-Account-ID": account} if isinstance(account, str) and account else {}
+    except Exception:
+        return {}
+
+
+def identity_headers(token: str, base_url: str) -> dict[str, str]:
+    """Hermes' own Codex identity + account headers, whatever its release calls them."""
+    if codex_cloudflare_headers is None:
+        return {"originator": "codex_cli_rs", **_account_headers(token)}
+    try:
+        return dict(codex_cloudflare_headers(token, base_url=base_url))
+    except TypeError:  # pragma: no cover - a Hermes without base_url
+        return dict(codex_cloudflare_headers(token))
+
+
 def upstream_headers(token: str, base_url: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
-        **codex_cloudflare_headers(token, base_url=base_url),
+        **identity_headers(token, base_url),
     }
+
+
+# ─── Model limits (so LearnHarness does not fall back to an 8k context) ─────
+
+_CONTEXT_CACHE: dict[tuple[str, str], int] = {}
+
+
+def context_length(model: str, provider: str, base_url: str, api_key: str = "") -> Optional[int]:
+    """Hermes' own context-length answer for a model (cached); None when unknown."""
+    key = (provider, model)
+    if key in _CONTEXT_CACHE:
+        return _CONTEXT_CACHE[key]
+    try:
+        from agent.model_metadata import get_model_context_length
+        value = int(get_model_context_length(model, base_url=base_url, api_key=api_key, provider=provider))
+    except Exception as exc:  # pragma: no cover - depends on the Hermes release
+        logger.info("context length unknown for %s: %s", model, exc)
+        return None
+    if value > 0:
+        _CONTEXT_CACHE[key] = value
+        return value
+    return None
+
+
+def catalog_limits(model: str, provider: str) -> dict[str, Any]:
+    """Max output tokens and image input from Hermes' models.dev cache (no network)."""
+    try:
+        from agent.models_dev import get_model_info
+        info = get_model_info(provider, model, allow_network=False)
+    except Exception:  # pragma: no cover - depends on the Hermes release
+        return {}
+    if info is None:
+        return {}
+    out: dict[str, Any] = {}
+    max_output = getattr(info, "max_output", 0)
+    if isinstance(max_output, int) and max_output > 0:
+        out["max_output_tokens"] = max_output
+    modalities = tuple(getattr(info, "input_modalities", ()) or ())
+    if modalities:
+        out["input_modalities"] = list(modalities)
+    return out
+
+
+async def with_context_lengths(rows: list[dict[str, Any]], provider: str, base_url: str, api_key: str = "",
+                               budget_s: float = 8.0) -> list[dict[str, Any]]:
+    """Add Hermes' limits to model rows within a time budget (LearnHarness'
+    model discovery gives up after 15 s, so slow lookups are simply left out):
+    ``context_length`` always when known, ``max_output_tokens`` and
+    ``input_modalities`` from Hermes' models.dev cache when present."""
+    async def one(row: dict[str, Any]) -> None:
+        model = str(row["id"])
+        n = await asyncio.to_thread(context_length, model, provider, base_url, api_key)
+        if n:
+            row["context_length"] = n
+        # -900k aliases share their base model's catalog entry.
+        row.update(await asyncio.to_thread(catalog_limits, wire_model(model), provider))
+    tasks = [asyncio.create_task(one(r)) for r in rows]
+    if tasks:
+        await asyncio.wait(tasks, timeout=budget_s)
+    return rows
+
+
+def codex_model_ids() -> list[str]:
+    """The account's Codex models, via Hermes (live catalog, cache or defaults)."""
+    token, base_url = codex_credentials()
+    try:
+        return list(get_codex_model_ids(token, base_url=base_url))
+    except TypeError:  # pragma: no cover - a Hermes without base_url
+        return list(get_codex_model_ids(token))
 
 
 # ─── Request translation: Chat Completions → Responses ───────────────────────
@@ -323,11 +424,13 @@ async def handle_models(request: web.Request) -> web.StreamResponse:
     if (refused := _local_only(request)) is not None:
         return refused
     try:
+        ids = await asyncio.to_thread(codex_model_ids)
         token, base_url = await asyncio.to_thread(codex_credentials)
-        ids = await asyncio.to_thread(get_codex_model_ids, token, base_url)
     except Exception as exc:
         return _error(401, str(exc))
-    return web.json_response({"object": "list", "data": [{"id": m, "object": "model", "owned_by": "openai"} for m in ids]})
+    rows = [{"id": m, "object": "model", "owned_by": "openai"} for m in ids]
+    await with_context_lengths(rows, "openai-codex", base_url, token)
+    return web.json_response({"object": "list", "data": rows})
 
 
 async def _open_upstream(session: aiohttp.ClientSession, payload: dict[str, Any]) -> aiohttp.ClientResponse:
@@ -349,6 +452,11 @@ async def handle_chat(request: web.Request) -> web.StreamResponse:
         return _error(400, "Invalid JSON body")
     if not isinstance(body, dict) or not body.get("model"):
         return _error(400, "model is required")
+    return await codex_chat(request, body)
+
+
+async def codex_chat(request: web.Request, body: dict[str, Any]) -> web.StreamResponse:
+    """Answer one Chat Completions request through the Codex backend."""
     payload = chat_to_responses(body)
     model = str(body["model"])
     stream = body.get("stream") is True
@@ -383,7 +491,8 @@ async def handle_chat(request: web.Request) -> web.StreamResponse:
         return out
 
 
-def build_app() -> web.Application:
+def build_app(models_handler=None, chat_handler=None) -> web.Application:
+    """The proxy app; other proxies (hermes_proxy.py) pass their own handlers."""
     app = web.Application(client_max_size=MAX_REQUEST_BYTES)
 
     async def session_ctx(app: web.Application):
@@ -392,8 +501,8 @@ def build_app() -> web.Application:
         await app["session"].close()
 
     app.cleanup_ctx.append(session_ctx)
-    app.router.add_get("/v1/models", handle_models)
-    app.router.add_post("/v1/chat/completions", handle_chat)
+    app.router.add_get("/v1/models", models_handler or handle_models)
+    app.router.add_post("/v1/chat/completions", chat_handler or handle_chat)
     return app
 
 

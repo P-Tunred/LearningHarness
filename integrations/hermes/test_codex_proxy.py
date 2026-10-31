@@ -1,4 +1,4 @@
-"""Tests for the Chat Completions ↔ Responses translation in codex_proxy.py.
+"""Tests for the Chat Completions ↔ Responses translation (codex_proxy.py) and routing (hermes_proxy.py).
 
 Run with Hermes' Python (the module imports Hermes):
     ./run-with-hermes.sh test_codex_proxy.py
@@ -80,6 +80,20 @@ class ResponseTranslation(unittest.TestCase):
         t.feed({"type": "response.failed", "response": {"error": {"message": "usage limit"}}})
         self.assertEqual(t.error, "usage limit")
         self.assertTrue(t.finished)
+
+
+class Routing(unittest.TestCase):
+    def test_backend_for(self):
+        import hermes_proxy as hp
+        routes = {"gpt-5.5": "codex", "glm-5": "zai"}
+        self.assertEqual(hp.backend_for("glm-5", routes), "zai")
+        self.assertEqual(hp.backend_for("gpt-5.5", routes), "codex")
+        self.assertEqual(hp.backend_for("GLM-4.7", {}), "zai", "unlisted GLM ids still go to Z.AI")
+        self.assertEqual(hp.backend_for("gpt-6-astra", {}), "codex")
+
+    def test_model_suffix_alias(self):
+        out = cp.chat_to_responses({"model": "gpt-5.6-sol-900k", "messages": []})
+        self.assertIn(out["model"], ("gpt-5.6-sol", "gpt-5.6-sol-900k"))  # stripped where Hermes knows the alias
 
 
 if __name__ == "__main__":

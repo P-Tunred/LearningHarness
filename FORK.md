@@ -27,6 +27,8 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
   - Z.AI: LearnHarness → Hermes → Z.AI, mit dem Z.AI-Key aus Hermes.
   - ChatGPT-Abo: LearnHarness → Hermes → ChatGPT (Codex-Backend), mit Hermes'
     Codex-Login; der Proxy übersetzt zwischen den Formaten.
+  - Beide zusammen (empfohlen): `start-hermes-proxy.sh`, ein Endpoint, Weiterleitung
+    nach Modell, mit Hermes' Kontext-/Antwortlängen für LearnHarness.
 - Anleitung: [integrations/hermes/README.md](integrations/hermes/README.md).
 
 ### 3. Second Brain + Morning Dashboard
