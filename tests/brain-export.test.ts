@@ -206,9 +206,9 @@ describe("study timer in the export (version 3)", () => {
 		assert.equal(stats.exams[0].focuses[0].timerMinutes, 0, "not this focus's time");
 	});
 
-	it("without a timer the old fields are unchanged and timer.byDay is empty", () => {
+	it("without a timer the old fields are unchanged and timer is empty", () => {
 		const stats = JSON.parse(buildBrainExport({ chats: [TEACH, OTHER], graph, exams, now }).files.get("learnharness-stats.json")!);
-		assert.deepEqual(stats.timer, { byDay: {} });
+		assert.deepEqual(stats.timer, { byDay: {}, sessions: [] });
 		assert.equal(stats.exams[0].minutesByDay[day], estimateMin || undefined);
 		assert.deepEqual(stats.exams[0].timerMinutesByDay, {});
 	});

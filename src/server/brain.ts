@@ -178,6 +178,7 @@ export function exportToBrain(brainRoot: string, now = new Date()): ExportResult
 		organization: stores.sourceOrganizationStore.read(),
 		exams: examOverviews(brainRoot),
 		timerPieces: timerPiecesAt(now.getTime()),
+		timerSessions: readTimerState().sessions,
 		now: now.toISOString(),
 	});
 	const previous = readManifest(exportDir);

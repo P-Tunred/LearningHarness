@@ -2,9 +2,11 @@
 
 /**
  * Study timer (fork addition) — a small floating timer at the bottom right:
- * the subject of the chat on screen, today's measured time in it, and one
- * button (Start / Pause / Resume). Mod+Shift+T does the same. A click on
- * the subject opens a short list to book this chat elsewhere.
+ * the subject of the chat on screen, today's measured time in it, Start /
+ * Pause / Resume (Mod+Shift+T does the same) and Save. Pause is a break;
+ * Save ends the study session and books it — Daily takes it over from the
+ * brain export as its own study time. A click on the subject opens a short
+ * list to book this chat elsewhere.
  *
  * It never starts by itself. While it runs, the window beats every 30 s
  * with the time of the last input; the server ends the run on its own
@@ -29,12 +31,15 @@ interface TimerView {
 	askIdle: boolean;
 	stopped: "idle" | "asleep" | null;
 	choices: string[];
+	unsavedMs: number;
+	unsavedNoSubjectMs: number;
+	saved?: Array<{ subject: string; day: string; minutes: number }>;
 	now: number;
 }
 
 type Body =
 	| { action: "start" | "toggle" | "switch"; chatId: string | null }
-	| { action: "pause" }
+	| { action: "pause" | "save" }
 	| { action: "beat"; activeAt: number }
 	| { action: "assign"; chatId: string | null; subject: string | null };
 
@@ -43,6 +48,21 @@ type Body =
 const ACTIVITY_EVENTS = ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"] as const;
 /** A 1 s tick that took this long means the machine was asleep. */
 const WAKE_GAP_MS = 60_000;
+/** How long the "Saved …" line stays. */
+const SAVED_NOTICE_MS = 10_000;
+
+/** "42 min", "1 h 05" */
+function duration(minutes: number): string {
+	return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** What Save reports back, in one quiet line. */
+function savedNotice(v: TimerView): string {
+	const parts = (v.saved ?? []).map((s) => `${s.subject} ${duration(s.minutes)}`);
+	const missing = Math.round(v.unsavedNoSubjectMs / 60_000);
+	const head = parts.length ? `Saved: ${parts.join(" · ")} — reaches Daily within the hour` : "Nothing new to save";
+	return missing > 0 ? `${head}. ${duration(missing)} without a subject: pick one, then save again.` : head;
+}
 
 function clock(ms: number): string {
 	const total = Math.floor(ms / 1000);
@@ -67,14 +87,17 @@ function useStudyTimer(chatId: string | null) {
 		setError(false);
 	}, []);
 
-	const post = useCallback(async (body: Body) => {
+	const post = useCallback(async (body: Body): Promise<TimerView | null> => {
 		try {
 			const res = await fetch("/api/study-timer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			adopt((await res.json()) as TimerView);
+			const v = (await res.json()) as TimerView;
+			adopt(v);
+			return v;
 		} catch (err) {
 			console.error("[study-timer]", err);
 			setError(true);
+			return null;
 		}
 	}, [adopt]);
 
@@ -158,6 +181,16 @@ export function StudyTimer() {
 	usePopoverDismiss(rootRef, picking, closePicker);
 
 	const toggle = useCallback(() => void post({ action: "toggle", chatId }), [post, chatId]);
+	const [notice, setNotice] = useState<string | null>(null);
+	const saveSession = useCallback(async () => {
+		const v = await post({ action: "save" });
+		if (v) setNotice(savedNotice(v));
+	}, [post]);
+	useEffect(() => {
+		if (!notice) return;
+		const id = setTimeout(() => setNotice(null), SAVED_NOTICE_MS);
+		return () => clearTimeout(id);
+	}, [notice]);
 	useEffect(() => {
 		const onKbd = () => toggle();
 		const name = kbdEventForAction("toggle-study-timer");
@@ -259,7 +292,23 @@ export function StudyTimer() {
 				>
 					{view.running ? "Pause" : elapsed > 0 ? "Resume" : "Start"}
 				</button>
+				{(view.running || view.unsavedMs + view.unsavedNoSubjectMs > 0) && (
+					<button
+						type="button"
+						onClick={() => void saveSession()}
+						data-testid="study-timer-save"
+						title="End this study session and save it — Daily counts it as study time"
+						className="rounded-full px-2.5 py-1 text-foreground transition-colors hover:bg-accent"
+					>
+						Save
+					</button>
+				)}
 			</div>
+			{notice && (
+				<p role="status" className="max-w-72 rounded bg-background/80 px-2 text-right text-[11px] text-muted-foreground">
+					{notice}
+				</p>
+			)}
 			{(error || (!view.running && view.stopped === "idle")) && (
 				<p className="rounded bg-background/80 px-2 text-[11px] text-muted-foreground">
 					{error ? "Timer unreachable — time is not being saved" : "Paused after 20 min without input"}

@@ -109,6 +109,18 @@ describe("study timer, stored", () => {
 		assert.equal((readTimerState().pieces.at(-1)!.end - (T0 + 120 * MIN)) / MIN, 7);
 	});
 
+	it("Save books the unsaved time per subject and says what it saved", () => {
+		const v = studyTimerAction({ action: "save" }, T0 + 150 * MIN);
+		assert.equal(v.running, false);
+		assert.deepEqual(v.saved, [
+			{ subject: "FODS Theorie", day: DAY, minutes: 37 },
+			{ subject: "Statistik", day: DAY, minutes: 10 },
+		]);
+		assert.equal(v.unsavedMs, 0);
+		assert.deepEqual(studyTimerAction({ action: "save" }, T0 + 151 * MIN).saved, [], "nothing twice");
+		assert.equal(readTimerState().sessions.length, 2, "stored");
+	});
+
 	it("rejects malformed actions", () => {
 		assert.throws(() => parseTimerAction({ action: "explode" }));
 		assert.throws(() => parseTimerAction({ action: "beat" }));
@@ -128,5 +140,11 @@ describe("study timer, stored", () => {
 		assert.equal(trees.timerMinutes, 32);
 		assert.equal(trees.learningMinutes, 32);
 		assert.equal(fods.focuses.find((f: { title: string }) => f.title === "Clustering").timerMinutes, 0);
+		// The saved sessions, for Daily to book once each.
+		assert.deepEqual(stats.timer.sessions.map((s: { subject: string; day: string; minutes: number }) => [s.subject, s.day, s.minutes]), [
+			["FODS Theorie", DAY, 37],
+			["Statistik", DAY, 10],
+		]);
+		assert.ok(stats.timer.sessions.every((s: { id: string; start: string }) => s.id && !Number.isNaN(Date.parse(s.start))));
 	});
 });

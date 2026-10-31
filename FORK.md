@@ -118,8 +118,9 @@ LearnHarness starten; Cmd+Q beendet alles. Anleitung:
 
 Ein kleiner Timer unten rechts im Fenster (unter 1100 px Breite oben rechts
 unter der Titelleiste, damit er nie über der Eingabe liegt): Fach des Chats,
-heute darin gemessene Zeit (mm:ss, ab einer Stunde h:mm) und ein Knopf
-Start / Pause / Resume. **Mod+Shift+T** (Cmd auf dem Mac) tut dasselbe, siehe
+heute darin gemessene Zeit (mm:ss, ab einer Stunde h:mm), ein Knopf
+Start / Pause / Resume und **Save**. **Mod+Shift+T** (Cmd auf dem Mac) startet
+und pausiert, siehe
 [docs/keyboard.md](docs/keyboard.md). Ein Punkt zeigt den Zustand: grün = läuft,
 gelb = Chat ohne Fach. Sonst keine Animation. Beschriftung englisch wie der
 Rest der App („No subject“, „Still there?“).
@@ -144,6 +145,21 @@ Rest der App („No subject“, „Still there?“).
   fragen. Nach 15 Minuten ohne Eingabe oder Scrollen im Fenster fragt er
   leise „Still there?“; ohne Antwort pausiert er nach weiteren 5 Minuten und
   bucht die Leerlaufzeit nicht (das Stück endet bei der letzten Eingabe).
+- **Pause und Save** (Paul, 2026-10-31): Pause ist eine Unterbrechung. Save
+  beendet die Lernsitzung: der Timer pausiert, und die noch nicht
+  gespeicherte Zeit wird zu gespeicherten Sitzungen, je Tag und Fach eine,
+  mit fester Kennung. Eine Zeile meldet, was gespeichert wurde. Zeit ohne
+  Fach bleibt ungespeichert, bis der Chat ein Fach hat (die Zuordnung gilt
+  dann auch für seine ungespeicherte Zeit). Ungespeicherte Zeit von einem
+  früheren Tag speichert der Timer beim nächsten Öffnen selbst — ein
+  vergessenes Save kostet nichts.
+- **Bis Daily**: Die gespeicherten Sitzungen gehen mit dem Export ins Brain
+  (`timer.sessions`), kommen mit der stündlichen Spiegelung auf die VM, und
+  Daily übernimmt jede genau einmal als eigene Lernsitzung beim passenden
+  Fach („FODS Theorie“ → FODS). Score, Lernzeit-Seite und Tagesbericht
+  zählen sie dann mit; zu Dailys Timer muss niemand wechseln. Bis sie in
+  Daily stehen, kann es bis zu einer Stunde dauern. Findet Daily kein
+  passendes Fach, nennt es das Fach auf der Lernzeit-Seite.
 - **Speicher**: `study-timer.json` im LearnHarness-Datenordner. Das laufende
   Stück wird bei jedem Lebenszeichen sofort geschrieben, übersteht also
   Absturz und Neustart. Nichts verlässt den Rechner außer den Tagessummen im
@@ -154,6 +170,9 @@ Rest der App („No subject“, „Still there?“).
   - je Klausur `timerMinutesByDay` (Schwerpunkt-Chats und alles, was aufs
     Klausur-Fach gebucht ist);
   - je Schwerpunkt `timerMinutes`;
+  - `timer.sessions`: die gespeicherten Sitzungen der letzten 28 Tage
+    (`id`, `subject`, `day`, `minutes`, `start`) — Daily bucht jede `id`
+    einmal;
   - `minutesByDay` und `learningMinutes` nehmen pro Tag bzw. Session das
     Größere aus gemessen und geschätzt, nie die Summe.
 - **Tempo**: Die Regeln aus Daily (`src/lib/lernTempo.ts`) stecken 1:1 in

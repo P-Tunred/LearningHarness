@@ -6,7 +6,8 @@
  *
  * Every change is written at once (atomic rename), the running piece on
  * every heartbeat too — a crash or a quit loses at most one beat, and the
- * next read ends that piece at its last beat (see `settle`).
+ * next read ends that piece at its last beat (see `settle`). Saved sessions
+ * (Save) leave the machine only as part of the brain export, for Daily.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -19,12 +20,15 @@ import {
 	emptyTimerState,
 	parseTimerState,
 	pause,
+	save,
+	saveEarlierDays,
 	settle,
 	start,
 	subjectChoices,
 	subjectForChat,
 	switchContext,
 	todayForSubject,
+	unsavedMs,
 	type SubjectSources,
 	type TimerState,
 } from "../core/study-timer.ts";
@@ -76,11 +80,17 @@ export interface TimerView {
 	/** Why the last run ended on its own (shown once, quietly). */
 	stopped: "idle" | "asleep" | null;
 	choices: string[];
+	/** Time not saved yet, ms: with a subject (Save books it) and without. */
+	unsavedMs: number;
+	unsavedNoSubjectMs: number;
+	/** Only in the answer to Save: what it saved. */
+	saved?: Array<{ subject: string; day: string; minutes: number }>;
 	now: number;
 }
 
 function view(state: TimerState, now: number, sources: SubjectSources): TimerView {
 	const shown = state.running ?? state.context;
+	const unsaved = unsavedMs(state, now);
 	return {
 		running: !!state.running,
 		subject: shown.subject,
@@ -91,6 +101,8 @@ function view(state: TimerState, now: number, sources: SubjectSources): TimerVie
 		askIdle: !!state.running && now - state.running.activeAt >= IDLE_ASK_MS,
 		stopped: state.stopped ?? null,
 		choices: subjectChoices(sources),
+		unsavedMs: unsaved.withSubject,
+		unsavedNoSubjectMs: unsaved.withoutSubject,
 		now,
 	};
 }
@@ -103,7 +115,8 @@ function commit(before: TimerState, after: TimerState): void {
 		|| before.running?.subject !== after.running?.subject
 		|| before.running?.chatId !== after.running?.chatId
 		|| before.context.subject !== after.context.subject
-		|| before.pieces.length !== after.pieces.length;
+		|| before.pieces.length !== after.pieces.length
+		|| before.sessions.length !== after.sessions.length;
 	if (runChanged) emit("study-timer-changed", {});
 }
 
@@ -113,7 +126,7 @@ function commit(before: TimerState, after: TimerState): void {
  *  running (a reload, an app start on another chat), the run moves to it. */
 export function studyTimerView(chatId: string | null, now = Date.now()): TimerView {
 	const before = readTimerState();
-	let state = settle(before, now);
+	let state = saveEarlierDays(settle(before, now), now);
 	const sources = subjectSources(state);
 	if (chatId) state = switchContext(state, now, { chatId, subject: subjectForChat(chatId, sources) });
 	commit(before, state);
@@ -122,7 +135,7 @@ export function studyTimerView(chatId: string | null, now = Date.now()): TimerVi
 
 export type TimerAction =
 	| { action: "start" | "toggle" | "switch"; chatId?: string | null }
-	| { action: "pause" }
+	| { action: "pause" | "save" }
 	| { action: "beat"; activeAt: number }
 	| { action: "assign"; chatId: string | null; subject: string | null };
 
@@ -131,7 +144,7 @@ export class TimerActionError extends Error {}
 /** POST: one action, applied to the stored state. */
 export function studyTimerAction(input: TimerAction, now = Date.now()): TimerView {
 	const before = readTimerState();
-	let state = before;
+	let state = saveEarlierDays(settle(before, now), now);
 	const sources = () => subjectSources(state);
 	const contextFor = (chatId: string | null | undefined) =>
 		chatId ? { chatId, subject: subjectForChat(chatId, sources()) } : null;
@@ -153,6 +166,13 @@ export function studyTimerAction(input: TimerAction, now = Date.now()): TimerVie
 		case "pause":
 			state = pause(state, now);
 			break;
+		case "save": {
+			const known = state.sessions.length;
+			state = save(state, now);
+			commit(before, state);
+			const saved = state.sessions.slice(known).map(({ subject, day, minutes }) => ({ subject, day, minutes }));
+			return { ...view(state, now, subjectSources(state)), saved };
+		}
 		case "switch": {
 			const ctx = contextFor(input.chatId);
 			state = ctx ? switchContext(state, now, ctx) : settle(state, now);
@@ -182,7 +202,8 @@ export function parseTimerAction(body: unknown): TimerAction {
 		case "switch":
 			return { action: b.action, chatId };
 		case "pause":
-			return { action: "pause" };
+		case "save":
+			return { action: b.action };
 		case "beat":
 			if (typeof b.activeAt !== "number") throw new TimerActionError("beat needs activeAt");
 			return { action: "beat", activeAt: b.activeAt };
@@ -192,6 +213,6 @@ export function parseTimerAction(body: unknown): TimerAction {
 			return { action: "assign", chatId, subject };
 		}
 		default:
-			throw new TimerActionError("action must be start, toggle, switch, pause, beat or assign");
+			throw new TimerActionError("action must be start, toggle, switch, pause, save, beat or assign");
 	}
 }

@@ -18,6 +18,8 @@ import {
 	msBySubjectDay,
 	parseTimerState,
 	pause,
+	save,
+	saveEarlierDays,
 	settle,
 	splitByDay,
 	start,
@@ -26,6 +28,7 @@ import {
 	switchContext,
 	todayForSubject,
 	topFolderName,
+	unsavedMs,
 	type SubjectSources,
 	type TimerState,
 } from "../src/core/study-timer.ts";
@@ -132,7 +135,7 @@ describe("running, pausing, switching", () => {
 		assert.equal(s.running?.start, T0);
 	});
 
-	it("picking a subject relabels the running piece of that chat, not earlier ones", () => {
+	it("picking a subject relabels that chat's running and unsaved pieces, not other chats", () => {
 		let s = start(switchContext(emptyTimerState(), T0, { subject: null, chatId: "c-loose" }), T0);
 		s = beats(s, 1, 5);
 		s = switchContext(s, T0 + 5 * MIN, { subject: "Statistik", chatId: "c-stat" });
@@ -142,7 +145,7 @@ describe("running, pausing, switching", () => {
 		s = assignSubject(s, T0 + 12 * MIN, "c-loose", "KM");
 		s = beats(s, 13, 15);
 		s = pause(s, T0 + 15 * MIN);
-		assert.deepEqual(s.pieces.map((p) => p.subject), [null, "Statistik", "KM"]);
+		assert.deepEqual(s.pieces.map((p) => p.subject), ["KM", "Statistik", "KM"]);
 		assert.equal(s.chatSubjects["c-loose"], "KM");
 	});
 });
@@ -235,5 +238,74 @@ describe("stored state", () => {
 		const back = parseTimerState(JSON.parse(JSON.stringify({ ...s, pieces: [...s.pieces, { start: 5, end: 1 }, null] })));
 		assert.deepEqual(back.pieces, s.pieces);
 		assert.deepEqual(parseTimerState({ version: 9 }), emptyTimerState());
+	});
+});
+
+describe("saving a study session", () => {
+	const ctx = (subject: string | null, chatId: string) => ({ subject, chatId });
+	/** 20 min FODS, 10 min Statistik, 5 min in a chat without a subject. */
+	function morning(): TimerState {
+		let s = start(emptyTimerState(), T0, ctx("FODS Theorie", "c-focus"));
+		s = beats(s, 1, 20);
+		s = switchContext(s, T0 + 20 * MIN, ctx("Statistik", "c-stat"));
+		s = beats(s, 21, 30);
+		s = switchContext(s, T0 + 30 * MIN, ctx(null, "c-loose"));
+		return beats(s, 31, 35);
+	}
+
+	it("pauses and books one session per subject; time without a subject stays unsaved", () => {
+		const s = save(morning(), T0 + 35 * MIN);
+		assert.equal(s.running, null);
+		assert.deepEqual(s.sessions.map((x) => [x.subject, x.day, x.minutes]), [
+			["FODS Theorie", "2026-10-31", 20],
+			["Statistik", "2026-10-31", 10],
+		]);
+		assert.equal(new Set(s.sessions.map((x) => x.id)).size, 2, "ids are unique");
+		assert.deepEqual(unsavedMs(s, T0 + 36 * MIN), { withSubject: 0, withoutSubject: 5 * MIN });
+	});
+
+	it("saving twice books nothing twice", () => {
+		const once = save(morning(), T0 + 35 * MIN);
+		const twice = save(once, T0 + 36 * MIN);
+		assert.equal(twice.sessions.length, 2);
+	});
+
+	it("a subject picked afterwards relabels the unsaved time, and the next save books it", () => {
+		let s = save(morning(), T0 + 35 * MIN);
+		s = assignSubject(s, T0 + 36 * MIN, "c-loose", "KM");
+		s = save(s, T0 + 37 * MIN);
+		assert.deepEqual(s.sessions.map((x) => [x.subject, x.minutes]), [["FODS Theorie", 20], ["Statistik", 10], ["KM", 5]]);
+		// Saved time keeps its subject when the chat is re-booked later.
+		s = assignSubject(s, T0 + 38 * MIN, "c-focus", "KM");
+		assert.equal(s.pieces[0]!.subject, "FODS Theorie");
+	});
+
+	it("a session over midnight is booked to both days", () => {
+		const late = new Date(2026, 9, 31, 23, 30).getTime();
+		let s = start(emptyTimerState(), late, ctx("FODS Theorie", "c-focus"));
+		for (let m = 1; m <= 60; m++) s = beat(s, late + m * MIN, late + m * MIN);
+		s = save(s, late + 60 * MIN);
+		assert.deepEqual(s.sessions.map((x) => [x.day, x.minutes]), [["2026-10-31", 30], ["2026-11-01", 30]]);
+	});
+
+	it("a forgotten Save: earlier days are saved on their own, today waits", () => {
+		const yesterday = T0 - 24 * 60 * MIN;
+		let s = start(emptyTimerState(), yesterday, ctx("KM", "c"));
+		for (let m = 1; m <= 40; m++) s = beat(s, yesterday + m * MIN, yesterday + m * MIN);
+		s = pause(s, yesterday + 40 * MIN);
+		s = start(s, T0, ctx("KM", "c"));
+		s = beats(s, 1, 10);
+		s = pause(s, T0 + 10 * MIN);
+		s = saveEarlierDays(s, T0 + 11 * MIN);
+		assert.deepEqual(s.sessions.map((x) => [x.day, x.minutes]), [["2026-10-30", 40]]);
+		assert.equal(unsavedMs(s, T0 + 11 * MIN).withSubject, 10 * MIN);
+		assert.equal(saveEarlierDays(s, T0 + 12 * MIN), s, "nothing more to do: same state");
+	});
+
+	it("saved sessions survive a restart", () => {
+		const s = save(morning(), T0 + 35 * MIN);
+		const back = parseTimerState(JSON.parse(JSON.stringify(s)));
+		assert.deepEqual(back.sessions, s.sessions);
+		assert.deepEqual(back.pieces, s.pieces);
 	});
 });

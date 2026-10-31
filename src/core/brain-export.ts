@@ -25,7 +25,7 @@ import { derivePlanStatusesLh } from "./contracts/plan.ts";
 import type { LhMessage } from "./native-messages.ts";
 import type { DerivedGraph } from "./graph.ts";
 import type { SourceOrganization } from "./source-organization.ts";
-import { NO_SUBJECT, msByChatDay, msByDay, msBySubjectDay, type TimerPiece } from "./study-timer.ts";
+import { NO_SUBJECT, msByChatDay, msByDay, msBySubjectDay, type SavedSession, type TimerPiece } from "./study-timer.ts";
 
 /** Export folder inside a brain that has a `wiki/` (Paul's layout). */
 export const BRAIN_WIKI_EXPORT_DIR = "wiki/learnharness";
@@ -381,6 +381,8 @@ export interface BrainExportInput {
 	exams?: readonly ExamInput[];
 	/** Study-timer pieces, the running one cut at `now` (absent: none). */
 	timerPieces?: readonly TimerPiece[];
+	/** Study sessions Paul saved with the timer (absent: none). */
+	timerSessions?: readonly SavedSession[];
 	/** ISO time of the export; "recent" and the overview's date derive from it. */
 	now: string;
 	idleGapMs?: number;
@@ -415,8 +417,13 @@ export interface BrainStats {
 	/** Klausur-Aufträge, nearest date first (absent: none). */
 	exams?: ExamSummary[];
 	/** Measured study-timer minutes per local day and subject (last
-	 *  TIMER_EXPORT_DAYS days; "Ohne Fach" = no subject assigned). */
-	timer: { byDay: Record<string, Record<string, number>> };
+	 *  TIMER_EXPORT_DAYS days; "Ohne Fach" = no subject assigned), and the
+	 *  study sessions Paul saved in that time — Daily books each `id` once
+	 *  as its own study session. Oldest first. */
+	timer: {
+		byDay: Record<string, Record<string, number>>;
+		sessions: Array<{ id: string; subject: string; day: string; minutes: number; start: string }>;
+	};
 	/** Newest first. */
 	sessions: Array<{
 		id: string;
@@ -635,6 +642,7 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 		});
 	}
 
+	const timerSince = localDay(now.getTime() - (TIMER_EXPORT_DAYS - 1) * 24 * 60 * MINUTE);
 	const stats: BrainStats = {
 		version: 3,
 		generatedAt: input.now,
@@ -655,7 +663,12 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 			.map(([date, t]) => ({ date, learningMinutes: minutes(t.ms), sessions: t.sessions.size })),
 		topics: summarizeTopics(chats, input.organization, now, idleGapMs, measured),
 		...(input.exams?.length ? { exams: summarizeExams(input.exams, chats, idleGapMs, timerPieces) } : {}),
-		timer: { byDay: timerByDay(timerPieces, localDay(now.getTime() - (TIMER_EXPORT_DAYS - 1) * 24 * 60 * MINUTE)) },
+		timer: {
+			byDay: timerByDay(timerPieces, timerSince),
+			sessions: (input.timerSessions ?? [])
+				.filter((s) => s.day >= timerSince)
+				.map((s) => ({ id: s.id, subject: s.subject, day: s.day, minutes: s.minutes, start: new Date(s.start).toISOString() })),
+		},
 		sessions: sessionRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
 	};
 	const files = new Map<string, string>([

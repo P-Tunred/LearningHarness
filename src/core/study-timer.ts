@@ -27,6 +27,14 @@
  *  - Idle: no input or scrolling for IDLE_ASK_MS → the timer asks; with no
  *    answer IDLE_PAUSE_MS after the last input it pauses and the piece ends
  *    at that last input, so the idle stretch is not booked.
+ *
+ * SAVING (Paul, 2026-10-31: "Pause is good, but I must be able to save")
+ * Pause is a break; Save ends the study session: the timer pauses and the
+ * unsaved pieces become SAVED SESSIONS, one per day and subject. Those go
+ * out with the export and Daily books them as its own study sessions, so
+ * Paul never has to switch to Daily's timer. Time without a subject stays
+ * unsaved until it has one. Unsaved time from an earlier day is saved by
+ * itself on the next read, so a forgotten Save loses nothing.
  */
 
 import { examFolderName } from "./exam-plan.ts";
@@ -48,6 +56,8 @@ const MAX_PIECES = 20_000;
 const MIN_PIECE_MS = 1000;
 /** Export key for time without a subject (Daily reads German keys). */
 export const NO_SUBJECT = "Ohne Fach";
+/** Saved sessions kept (oldest dropped first). */
+const MAX_SESSIONS = 5000;
 
 export interface TimerContext {
 	/** null = no subject yet. */
@@ -59,6 +69,20 @@ export interface TimerContext {
 export interface TimerPiece extends TimerContext {
 	start: number;
 	end: number;
+	/** When this piece went into a saved session; absent = not saved yet. */
+	savedAt?: number;
+}
+
+/** One saved study session: one subject on one local day. */
+export interface SavedSession {
+	/** Stable id — Daily books each id once. */
+	id: string;
+	subject: string;
+	day: string;
+	minutes: number;
+	start: number;
+	end: number;
+	savedAt: number;
 }
 
 export interface RunningPiece extends TimerContext {
@@ -79,6 +103,7 @@ export interface TimerState {
 	chatSubjects: Record<string, string>;
 	/** Why the last run ended on its own, until the next start. */
 	stopped?: "idle" | "asleep" | null;
+	sessions: SavedSession[];
 }
 
 export const emptyTimerState = (): TimerState => ({
@@ -88,6 +113,7 @@ export const emptyTimerState = (): TimerState => ({
 	context: { subject: null, chatId: null },
 	chatSubjects: {},
 	stopped: null,
+	sessions: [],
 });
 
 // ─── Subject ────────────────────────────────────────────────────────────────
@@ -213,8 +239,8 @@ export function switchContext(state: TimerState, now: number, ctx: TimerContext)
 
 /**
  * Paul picks a subject for a chat by hand. Remembered for that chat; the
- * running piece of the same chat is relabelled from its start (it is the
- * same stretch of learning, just named now), earlier pieces stay as booked.
+ * running piece and the unsaved pieces of the same chat are relabelled (the
+ * same learning, just named now). Saved time stays as it was saved.
  */
 export function assignSubject(state: TimerState, now: number, chatId: string | null, subject: string | null): TimerState {
 	const s = settle(state, now);
@@ -230,7 +256,58 @@ export function assignSubject(state: TimerState, now: number, chatId: string | n
 		chatSubjects,
 		context: relabel(s.context),
 		running: s.running ? relabel(s.running) : null,
+		pieces: s.pieces.map((p) => (p.savedAt === undefined ? relabel(p) : p)),
 	};
+}
+
+/** Turn the unsaved pieces that pass `pick` (and have a subject) into saved
+ *  sessions, one per local day and subject. Too short to round to a minute:
+ *  marked saved, no session. */
+function book(state: TimerState, now: number, pick: (p: TimerPiece) => boolean): TimerState {
+	const groups = new Map<string, { subject: string; day: string; ms: number; start: number; end: number }>();
+	let touched = false;
+	const pieces = state.pieces.map((p) => {
+		if (p.savedAt !== undefined || p.subject === null || !pick(p)) return p;
+		touched = true;
+		for (const [day, from, to] of segments(p)) {
+			const key = `${day}|${p.subject}`;
+			const g = groups.get(key) ?? { subject: p.subject, day, ms: 0, start: from, end: to };
+			groups.set(key, { ...g, ms: g.ms + (to - from), start: Math.min(g.start, from), end: Math.max(g.end, to) });
+		}
+		return { ...p, savedAt: now };
+	});
+	if (!touched) return state;
+	const fresh: SavedSession[] = [];
+	for (const g of groups.values()) {
+		const minutes = Math.round(g.ms / 60_000);
+		if (minutes < 1) continue;
+		fresh.push({ id: `${now.toString(36)}-${fresh.length}`, subject: g.subject, day: g.day, minutes, start: g.start, end: g.end, savedAt: now });
+	}
+	return { ...state, pieces, sessions: [...state.sessions, ...fresh].slice(-MAX_SESSIONS) };
+}
+
+/** Save: end the study session — pause, then save every unsaved piece that
+ *  has a subject. */
+export function save(state: TimerState, now: number): TimerState {
+	return book(pause(state, now), now, () => true);
+}
+
+/** Unsaved time from before today is saved by itself (a forgotten Save). */
+export function saveEarlierDays(state: TimerState, now: number): TimerState {
+	const today = startOfDay(now);
+	return book(state, now, (p) => p.end <= today);
+}
+
+/** Unsaved time, the running piece included, in ms: with and without a subject. */
+export function unsavedMs(state: TimerState, now: number): { withSubject: number; withoutSubject: number } {
+	let withSubject = 0;
+	let withoutSubject = 0;
+	for (const p of allPieces(state, now)) {
+		if (p.savedAt !== undefined) continue;
+		if (p.subject) withSubject += p.end - p.start;
+		else withoutSubject += p.end - p.start;
+	}
+	return { withSubject, withoutSubject };
 }
 
 // ─── Reading it back ────────────────────────────────────────────────────────
@@ -245,6 +322,22 @@ const nextMidnight = (ms: number) => {
 	const d = new Date(ms);
 	return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
 };
+const startOfDay = (ms: number) => {
+	const d = new Date(ms);
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+};
+
+/** A piece cut at local midnights: [day, from, to][]. */
+function segments(piece: Pick<TimerPiece, "start" | "end">): Array<[string, number, number]> {
+	const out: Array<[string, number, number]> = [];
+	let from = piece.start;
+	while (from < piece.end) {
+		const to = Math.min(piece.end, nextMidnight(from));
+		out.push([dayOf(from), from, to]);
+		from = to;
+	}
+	return out;
+}
 
 /** All pieces, the running one up to `now` included. */
 export function allPieces(state: TimerState, now: number): TimerPiece[] {
@@ -254,14 +347,7 @@ export function allPieces(state: TimerState, now: number): TimerPiece[] {
 
 /** Split a piece at local midnights: [day, ms][]. */
 export function splitByDay(piece: Pick<TimerPiece, "start" | "end">): Array<[string, number]> {
-	const out: Array<[string, number]> = [];
-	let from = piece.start;
-	while (from < piece.end) {
-		const to = Math.min(piece.end, nextMidnight(from));
-		out.push([dayOf(from), to - from]);
-		from = to;
-	}
-	return out;
+	return segments(piece).map(([day, from, to]) => [day, to - from]);
 }
 
 /** Milliseconds per local day, for the pieces that pass `keep`. */
@@ -319,10 +405,24 @@ export function parseTimerState(raw: unknown): TimerState {
 		return { subject: str(c.subject), chatId: str(c.chatId) };
 	};
 	const pieces = Array.isArray(r.pieces)
-		? r.pieces.flatMap((p) => {
+		? r.pieces.flatMap((p): TimerPiece[] => {
 				const start = num(p?.start);
 				const end = num(p?.end);
-				return start !== null && end !== null && end > start ? [{ ...ctx(p), start, end }] : [];
+				if (start === null || end === null || end <= start) return [];
+				const savedAt = num(p.savedAt);
+				return [savedAt === null ? { ...ctx(p), start, end } : { ...ctx(p), start, end, savedAt }];
+			})
+		: [];
+	const sessions = Array.isArray(r.sessions)
+		? r.sessions.flatMap((x): SavedSession[] => {
+				const id = str(x?.id);
+				const subject = str(x?.subject);
+				const minutes = num(x?.minutes);
+				const start = num(x?.start);
+				const end = num(x?.end);
+				const day = typeof x?.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x.day) ? x.day : null;
+				if (!id || !subject || minutes === null || start === null || end === null || !day) return [];
+				return [{ id, subject: subject.trim(), day, minutes: Math.round(minutes), start, end, savedAt: num(x.savedAt) ?? end }];
 			})
 		: [];
 	let running: RunningPiece | null = null;
@@ -340,5 +440,6 @@ export function parseTimerState(raw: unknown): TimerState {
 		context: ctx(r.context),
 		chatSubjects,
 		stopped: r.stopped === "idle" || r.stopped === "asleep" ? r.stopped : null,
+		sessions,
 	};
 }
