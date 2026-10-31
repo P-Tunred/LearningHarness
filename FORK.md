@@ -64,6 +64,13 @@ Markdown-Notizen (z. B. Google Drive für Desktop:
   `components/settings/brain-section.tsx`. Tests: `tests/brain-export.test.ts`,
   `tests/brain-sync.test.ts`.
 
+### 4. Startsymbol für den Mac
+
+`integrations/mac/install-launcher.sh root@<server>` legt einmalig das Symbol
+„LearnHarness (Hermes)“ an. Ein Klick: Update von GitHub, Tunnel zu Hermes,
+LearnHarness starten; Cmd+Q beendet alles. Anleitung:
+[integrations/mac/README.md](integrations/mac/README.md).
+
 ## Diese Version starten (zum Ausprobieren)
 
 Voraussetzung: [Node.js](https://nodejs.org) (aktuelle Version) und Git.
