@@ -21,6 +21,12 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
   Einstellung in `src/core/settings.ts`, Tests in
   `tests/window-opacity.test.ts`.
 
+### 2. Anfragen über Hermes (Z.AI)
+
+- `integrations/hermes/`: Startskript für einen Hermes-Proxy mit Z.AI.
+  LearnHarness → Hermes → Z.AI, mit dem Z.AI-Key aus Hermes.
+- Anleitung: [integrations/hermes/README.md](integrations/hermes/README.md).
+
 ## Diese Version starten (zum Ausprobieren)
 
 Voraussetzung: [Node.js](https://nodejs.org) (aktuelle Version) und Git.
