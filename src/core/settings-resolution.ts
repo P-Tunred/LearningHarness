@@ -213,6 +213,7 @@ export function resolveSettings(record: UserSettings | null): EffectiveSettings 
 				boldColor: md.boldColor ?? factoryMd.boldColor,
 				italicColor: md.italicColor ?? factoryMd.italicColor,
 			},
+			windowOpacity: appearance.windowOpacity ?? factoryAppearance.windowOpacity,
 		},
 		graph: {
 			// Wave 7 collapse (owner ruling 2026-09-23): the master switch ONLY —

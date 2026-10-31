@@ -396,6 +396,11 @@ export interface AppearanceSettings {
 	/** Session names in CMU Serif (default true — today's look). */
 	sessionNameSerif?: boolean;
 	mdRendering?: MdRenderingSettings;
+	/** Window background opacity in percent (30–100, default 100 = opaque).
+	 *  Below 100 the desktop window's background lets the desktop shine
+	 *  through (macOS vibrancy / Windows acrylic blur). Text, cards, menus
+	 *  and dialogs stay opaque; only the base background is affected. */
+	windowOpacity?: number;
 }
 
 /** Knowledge-graph settings — a strict dependency ladder (owner decision
@@ -500,6 +505,7 @@ export interface FactorySettings {
 			boldColor: string | null;
 			italicColor: string | null;
 		};
+		windowOpacity: number;
 	};
 	graph: Required<GraphSettings>;
 	compaction: Required<CompactionSettings>;
@@ -516,6 +522,7 @@ export const FACTORY_SETTINGS: FactorySettings = {
 		proseFontSize: 16,
 		sessionNameSerif: true,
 		mdRendering: { headingWeight: 900, boldColor: null, italicColor: null },
+		windowOpacity: 100, // opaque — today's look until the user lowers it
 	},
 	graph: { enabled: true, rendering: true, extractionChunkTokens: 4096 },
 	compaction: { thresholdTokens: 150_000 },
@@ -530,6 +537,10 @@ export const EXTRACTION_CHUNK_TOKENS_FLOOR = 500;
 
 const PROSE_FONT_MIN = 12;
 const PROSE_FONT_MAX = 24;
+/** Window-opacity bounds (percent). The floor keeps text readable over any
+ *  desktop; exported for the PUT parser and the settings UI. */
+export const WINDOW_OPACITY_MIN = 30;
+export const WINDOW_OPACITY_MAX = 100;
 
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
@@ -747,6 +758,9 @@ function sanitizeAppearance(raw: Record<string, unknown>): AppearanceSettings {
 	const sessionNameSerif = boolOrDrop(raw.sessionNameSerif);
 	if (sessionNameSerif !== undefined) out.sessionNameSerif = sessionNameSerif;
 	if (raw.mdRendering !== undefined) out.mdRendering = sanitizeMdRendering(raw.mdRendering);
+	if (typeof raw.windowOpacity === "number" && Number.isFinite(raw.windowOpacity)) {
+		out.windowOpacity = clamp(Math.round(raw.windowOpacity), WINDOW_OPACITY_MIN, WINDOW_OPACITY_MAX);
+	}
 	return out;
 }
 

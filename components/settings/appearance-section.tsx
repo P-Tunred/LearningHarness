@@ -33,6 +33,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
 	EXTRACTION_CHUNK_TOKENS_FLOOR,
+	WINDOW_OPACITY_MAX,
+	WINDOW_OPACITY_MIN,
 	resolveSettings,
 	type AppearanceSettings,
 	type GraphSettings,
@@ -202,6 +204,32 @@ export function AppearanceSection({
 					ariaLabel="background hex"
 					testid="input-background"
 					onCommit={(v) => onSectionChange({ ...appearance, background: v === "" ? null : v })}
+				/>
+			</SettingsRow>
+			<SettingsRow
+				label="Window opacity"
+				hint={`${resolved.windowOpacity}% · ${WINDOW_OPACITY_MIN}–${WINDOW_OPACITY_MAX}, lower = see-through (desktop app)`}
+				testid="row-window-opacity"
+			>
+				<CommitInput
+					type="number"
+					value={String(appearance?.windowOpacity ?? "")}
+					placeholder="100"
+					ariaLabel="window opacity percent"
+					testid="input-window-opacity"
+					onCommit={(v) => {
+						// Empty = factory (opaque): omit the key, the number-field unset.
+						if (v === "") {
+							onSectionChange({ ...appearance, windowOpacity: undefined });
+							return;
+						}
+						const n = Number(v);
+						if (!Number.isFinite(n)) return;
+						onSectionChange({
+							...appearance,
+							windowOpacity: Math.min(WINDOW_OPACITY_MAX, Math.max(WINDOW_OPACITY_MIN, Math.round(n))),
+						});
+					}}
 				/>
 			</SettingsRow>
 			<SettingsRow

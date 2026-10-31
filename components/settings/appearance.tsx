@@ -36,7 +36,27 @@ export function resolveAppearance(delta: AppearanceSettings | undefined) {
 			boldColor: delta?.mdRendering?.boldColor ?? f.mdRendering.boldColor,
 			italicColor: delta?.mdRendering?.italicColor ?? f.mdRendering.italicColor,
 		},
+		windowOpacity: delta?.windowOpacity ?? f.windowOpacity,
 	};
+}
+
+/** The dark mode's default background (globals.css :root/.dark --background). */
+const DEFAULT_DARK_BACKGROUND = "#141414";
+
+/** Whether this page runs inside the desktop shell, whose window has a
+ *  native see-through material (electron/main.cjs). In a plain browser a
+ *  translucent background would only show the page's white canvas, so the
+ *  opacity applies to the desktop window alone. */
+function inDesktopShell(): boolean {
+	return typeof window !== "undefined" && "lh" in window;
+}
+
+/** "#rrggbb" (or "#rgb") + opacity percent → "#rrggbbaa". Pure — exported
+ *  for tests. */
+export function withOpacity(hex: string, percent: number): string {
+	const full = hex.length === 4 ? `#${hex.slice(1).split("").map((c) => c + c).join("")}` : hex.slice(0, 7);
+	const alpha = Math.round((Math.min(100, Math.max(0, percent)) / 100) * 255);
+	return `${full}${alpha.toString(16).padStart(2, "0")}`;
 }
 
 /** One channel clamped on the dark curve: additive offsets matching today's
@@ -74,9 +94,18 @@ export function derivedPalette(background: string): Record<string, string> {
 /** THE mapping: resolved appearance → the CSS variables to set on <html>.
  *  Absent entries = leave the factory stylesheet value in place. Pure —
  *  exported for tests. */
-export function appearanceVars(a: ReturnType<typeof resolveAppearance>): Record<string, string> {
+export function appearanceVars(
+	a: ReturnType<typeof resolveAppearance>,
+	desktop: boolean = inDesktopShell(),
+): Record<string, string> {
 	const vars: Record<string, string> = {};
 	if (a.background !== null) Object.assign(vars, derivedPalette(a.background));
+	// Window transparency: ONLY the base background turns translucent —
+	// cards, popovers, inputs' edges and dialogs keep their opaque derived
+	// colors so text stays readable. 100 = leave the opaque value in place.
+	if (desktop && a.windowOpacity < 100) {
+		vars["--background"] = withOpacity(a.background ?? DEFAULT_DARK_BACKGROUND, a.windowOpacity);
+	}
 	if (a.fontFamily !== null) {
 		vars["--font-prose"] = `"${a.fontFamily}", var(--font-sans3), ui-sans-serif, system-ui, sans-serif`;
 	}

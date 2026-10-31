@@ -26,7 +26,7 @@ import type {
 	ModelSlot,
 	RoleModelOverride,
 } from "../core/settings.ts";
-import { BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS } from "../core/settings.ts";
+import { BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS, WINDOW_OPACITY_MAX, WINDOW_OPACITY_MIN } from "../core/settings.ts";
 import { WRITABLE_TOOL_KEYS } from "../core/pending.ts";
 import { isDictationLanguage } from "../core/dictation.ts";
 
@@ -286,6 +286,20 @@ export function parseAppearanceSettingsBody(body: unknown): SettingsBodyResult<A
 			rendering.italicColor = parsed.color ?? null;
 		}
 		if (Object.keys(rendering).length) settings.mdRendering = rendering;
+	}
+	if (raw.windowOpacity !== undefined) {
+		if (
+			typeof raw.windowOpacity !== "number" ||
+			!Number.isInteger(raw.windowOpacity) ||
+			raw.windowOpacity < WINDOW_OPACITY_MIN ||
+			raw.windowOpacity > WINDOW_OPACITY_MAX
+		) {
+			return {
+				ok: false,
+				error: `windowOpacity must be an integer between ${WINDOW_OPACITY_MIN} and ${WINDOW_OPACITY_MAX}`,
+			};
+		}
+		settings.windowOpacity = raw.windowOpacity;
 	}
 	return { ok: true, settings };
 }

@@ -24,7 +24,7 @@
  *     would shadow every settings-page key change until restart.
  */
 
-const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme, session, shell } = require("electron");
 const { createChatGPT, fileStore } = require("./chatgpt.cjs");
 const { attachChatGPTChild, trustedSender, chatGPTControl } = require("./chatgpt-ipc.cjs");
 const { createSubscriptions, loadSubscriptionSDK } = require("./subscriptions.cjs");
@@ -286,6 +286,19 @@ function killServer() {
  *    default, we do not);
  *  - will-navigate pinned to the app origin; window.open always denied —
  *    external links go to the real browser via shell.openExternal. */
+/** The native window material behind the renderer (see createWindow). */
+function windowMaterial() {
+	if (process.platform === "darwin") {
+		return { backgroundColor: "#00000000", vibrancy: "under-window", visualEffectState: "active" };
+	}
+	if (process.platform === "win32") {
+		// Acrylic needs Windows 11 22H2+; older Windows ignores it and the
+		// page's own background (opaque at 100%) still paints the window.
+		return { backgroundColor: "#00000000", backgroundMaterial: "acrylic" };
+	}
+	return { backgroundColor: "#141414" };
+}
+
 function createWindow(url) {
 	const win = new BrowserWindow({
 		width: 1440,
@@ -326,7 +339,12 @@ function createWindow(url) {
 		// The app background (#141414) fills the lag instead. `show: false` +
 		// ready-to-show is the same treatment for first paint: the window
 		// appears only once the page has actually rendered.
-		backgroundColor: "#141414",
+		// See-through window (fork addition): on macOS and Windows the native
+		// surface is a blur material and stays transparent, so the renderer's
+		// "Window opacity" setting (Settings → Appearance) decides how much of
+		// the desktop shows through. At 100% the page paints #141414 itself and
+		// looks exactly as before. Linux has no portable blur → opaque as before.
+		...windowMaterial(),
 		show: false,
 		// Narrow-window behavior (owner, 2026-09-17): 640px is the floor —
 		// below it even a wrapped chrome row gets cramped and the chat header
@@ -645,6 +663,9 @@ async function main() {
 	process.on("SIGHUP", killServer);
 
 	await app.whenReady();
+	// The app is dark-only: keep the see-through window material dark too,
+	// so a light system appearance does not wash out the background.
+	nativeTheme.themeSource = "dark";
 
 	// Dev mode: point at a running `next dev` server (LH_DEV_URL) — no
 	// spawn, no packaging, full HMR. The rest of this shell still applies
