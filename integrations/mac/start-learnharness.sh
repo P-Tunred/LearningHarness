@@ -37,6 +37,7 @@ if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK")" 2>/dev/null; then
 	exit 0
 fi
 echo $$ >"$LOCK"
+notify "LearnHarness startet…"
 
 TUNNEL_PID=""
 cleanup() {
@@ -61,7 +62,7 @@ fi
 STAMP=".git/learnharness-deps.sha"
 SUM="$(shasum package-lock.json | cut -d' ' -f1)"
 if [ ! -d node_modules ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$SUM" ]; then
-	notify "Installiere Updates… (einmalig etwas länger)"
+	notify "Installiere Updates… das kann 2–3 Minuten dauern."
 	if npm ci --no-audit --no-fund; then
 		echo "$SUM" >"$STAMP"
 	else
