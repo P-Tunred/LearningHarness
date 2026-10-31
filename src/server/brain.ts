@@ -38,6 +38,7 @@ import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
 import { convertPdf } from "../agent/subagents/pdf-ops.ts";
 import { joinPages } from "../agent/subagents/pdf-markdown.ts";
 import { configuredBrainFolder, exportDirFor, usableFolder } from "./brain-folder.ts";
+import { examOverviews, syncExamPlans } from "./exam-plans.ts";
 import { extraction } from "./chat-handler.ts";
 import { sourceDirectory } from "./source-organization.ts";
 import { stores } from "./stores.ts";
@@ -59,6 +60,8 @@ export interface BrainStatus {
 	/** Exported paths skipped because a file LearnHarness did not create is there. */
 	conflicts?: string[];
 	import?: { total: number; done: number; failed: number; current?: string; finishedAt?: string };
+	/** Klausur-Aufträge read at the last start. */
+	exams?: { plans: number; created: number; errors: string[] };
 }
 
 interface BrainGlobal {
@@ -144,6 +147,7 @@ export function exportToBrain(brainRoot: string, now = new Date()): ExportResult
 		chats: readAllChats(),
 		graph: getGraph(stores.graphStore),
 		organization: stores.sourceOrganizationStore.read(),
+		exams: examOverviews(brainRoot),
 		now: now.toISOString(),
 	});
 	const previous = readManifest(exportDir);
@@ -333,6 +337,17 @@ function runExport(root: string): void {
 	});
 }
 
+/** Create the sessions new Klausur-Aufträge ask for; never fatal for the sync. */
+function runExamPlans(root: string): void {
+	try {
+		const exams = syncExamPlans(root);
+		setStatus({ exams });
+		if (exams.created) emit("sources-changed", {});
+	} catch (err) {
+		setStatus({ exams: { plans: 0, created: 0, errors: [err instanceof Error ? err.message : String(err)] } });
+	}
+}
+
 function exclusive(task: () => Promise<void>): Promise<void> {
 	const rt = runtime();
 	const previous = rt.running ?? Promise.resolve();
@@ -392,6 +407,7 @@ export function startBrainSync(options: { force?: boolean } = {}): Promise<void>
 		if (!root) return;
 		try {
 			await importInbox(root);
+			runExamPlans(root);
 			runExport(root);
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);

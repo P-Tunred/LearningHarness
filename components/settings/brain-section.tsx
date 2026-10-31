@@ -17,6 +17,7 @@ interface BrainStatusView {
 	exportDir?: string;
 	conflicts?: string[];
 	import?: { total: number; done: number; failed: number; current?: string; finishedAt?: string };
+	exams?: { plans: number; created: number; errors: string[] };
 }
 
 const POLL_MS = 2_000;
@@ -103,6 +104,18 @@ export function BrainSection({
 			<SettingsRow label="Letzter Eingang" testid="row-brain-import">
 				<span className="font-ui text-xs text-muted-foreground">{lastImport}</span>
 			</SettingsRow>
+			{status?.exams && (status.exams.plans > 0 || status.exams.errors.length > 0) && (
+				<SettingsRow
+					label="Klausur-Aufträge"
+					hint="Pläne aus „LearnHarness/Auftraege/“: jeder Schwerpunkt wird eine Session im Ordner der Klausur."
+					testid="row-brain-exams"
+				>
+					<span className="max-w-96 text-right font-ui text-xs text-muted-foreground">
+						{`${status.exams.plans} ${status.exams.plans === 1 ? "Auftrag" : "Aufträge"}, ${status.exams.created} neue Sessions`}
+						{status.exams.errors.length > 0 && ` · Fehler: ${status.exams.errors.join("; ")}`}
+					</span>
+				</SettingsRow>
+			)}
 			{status?.conflicts && status.conflicts.length > 0 && (
 				<SettingsRow label="Übersprungen" hint="Dort liegt schon eine Datei, die nicht von LearnHarness stammt." testid="row-brain-conflicts">
 					<span className="max-w-96 text-right font-ui text-xs text-muted-foreground">{status.conflicts.join(", ")}</span>

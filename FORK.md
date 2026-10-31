@@ -64,13 +64,28 @@ nicht jede Aussage.
   nach `Eingang/importiert/`. Fehlen Modelle/Keys, stoppt der Import mit einer
   Meldung und versucht es beim nächsten Start erneut. Der Stand liegt in
   `brain-sync.json` im LearnHarness-Datenordner, nicht im Brain.
+- **Klausur-Aufträge (Claude → LearnHarness)**: Ein Klausurplan als
+  Markdown in `LearnHarness/Auftraege/` im Brain. Vorne `klausur:` und
+  `datum:` (JJJJ-MM-TT) als Frontmatter, dann je Schwerpunkt eine
+  `## Überschrift` mit optional `Gewicht: hoch|mittel|niedrig` und freiem Text
+  (Ziel, Quellen, Hinweise aus Altklausuren). Text vor dem ersten `##` gilt für
+  alle Schwerpunkte. Beim App-Start wird jeder Schwerpunkt eine Session im
+  Ordner „<Klausur> Klausur“; ihr Text ist der Start-Auftrag und wird beim
+  ersten Öffnen abgeschickt (vorher läuft nichts, nichts kostet). Die Datei
+  bleibt liegen: neue Schwerpunkte werden beim nächsten Start ergänzt,
+  bestehende Sessions nie doppelt angelegt. Fortschritt (angefangen,
+  Lernzeit, offene Fragen) steht im Lernstand unter „Klausuren“ und in
+  `learnharness-stats.json` unter `exams`. Stand der Aufträge:
+  `klausur-auftraege.json` im Datenordner.
 - **Lernzeit** = Zeit zwischen deinen Aktionen in einer Session; Pausen über
   10 Minuten zählen nicht.
 - Code: `src/core/brain-export.ts` (Lernstand + Statistik, ohne
   Dateizugriff), `src/server/brain.ts` (Export, Eingang, Ablauf),
   `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),
+  `src/core/exam-plan.ts` + `src/server/exam-plans.ts` (Klausur-Aufträge),
   `app/api/brain/route.ts`, `components/settings/brain-section.tsx`. Tests:
-  `tests/brain-export.test.ts`, `tests/brain-sync.test.ts`.
+  `tests/brain-export.test.ts`, `tests/brain-sync.test.ts`,
+  `tests/exam-plan.test.ts`, `tests/exam-plans-sync.test.ts`.
 
 ### 4. Startsymbol für den Mac
 

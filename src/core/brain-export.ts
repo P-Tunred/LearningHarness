@@ -299,10 +299,36 @@ export function summarizeTopics(
 
 // ─── The export ──────────────────────────────────────────────────────────────
 
+/** A Klausur-Auftrag as the export sees it (src/server/exam-plans.ts). */
+export interface ExamInput {
+	exam: string;
+	date: string | null;
+	focuses: ReadonlyArray<{ title: string; weight: "hoch" | "mittel" | "niedrig" | null; chatId: string }>;
+}
+
+export interface ExamSummary {
+	exam: string;
+	date: string | null;
+	total: number;
+	/** Focus sessions with at least one message from Paul. */
+	started: number;
+	learningMinutes: number;
+	openQuestions: number;
+	focuses: Array<{
+		title: string;
+		weight: "hoch" | "mittel" | "niedrig" | null;
+		started: boolean;
+		learningMinutes: number;
+		openQuestions: number;
+		lastActive: string | null;
+	}>;
+}
+
 export interface BrainExportInput {
 	chats: readonly ChatRecord[];
 	graph: DerivedGraph;
 	organization?: SourceOrganization;
+	exams?: readonly ExamInput[];
 	/** ISO time of the export; "recent" and the overview's date derive from it. */
 	now: string;
 	idleGapMs?: number;
@@ -333,6 +359,8 @@ export interface BrainStats {
 	days: Array<{ date: string; learningMinutes: number; sessions: number }>;
 	/** Most recently active first — what the dashboard shows as current topics. */
 	topics: TopicSummary[];
+	/** Klausur-Aufträge, nearest date first (absent: none). */
+	exams?: ExamSummary[];
 	/** Newest first. */
 	sessions: Array<{
 		id: string;
@@ -347,6 +375,35 @@ export interface BrainStats {
 		correct: number;
 		practice: Record<PracticeOutcome, number>;
 	}>;
+}
+
+/** Progress of each exam plan, from its focus sessions. */
+export function summarizeExams(exams: readonly ExamInput[], chats: readonly ChatRecord[], idleGapMs = IDLE_GAP_MS): ExamSummary[] {
+	const byId = new Map(chats.map((c) => [c.id, c]));
+	return exams.map((e) => {
+		const focuses = e.focuses.map((f) => {
+			const chat = byId.get(f.chatId);
+			const d = chat ? digestSession(chat, idleGapMs) : null;
+			const started = !!chat && chat.messages.some((m) => (m as { role?: unknown }).role === "user");
+			return {
+				title: f.title,
+				weight: f.weight,
+				started,
+				learningMinutes: d ? minutes(d.learningMs) : 0,
+				openQuestions: d ? d.unsure.length : 0,
+				lastActive: d ? ([...d.learningByDay.keys()].sort().at(-1) ?? null) : null,
+			};
+		});
+		return {
+			exam: e.exam,
+			date: e.date,
+			total: focuses.length,
+			started: focuses.filter((f) => f.started).length,
+			learningMinutes: focuses.reduce((sum, f) => sum + f.learningMinutes, 0),
+			openQuestions: focuses.reduce((sum, f) => sum + f.openQuestions, 0),
+			focuses,
+		};
+	}).sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.exam.localeCompare(b.exam));
 }
 
 /** "1 h 05 min" / "40 min" — the Daily style. */
@@ -379,9 +436,23 @@ function overviewMarkdown(stats: BrainStats): string {
 		"",
 		`**Stand:** ${stand} · **Lernzeit der letzten ${stats.recentDays} Tage:** ${formatMinutes(stats.totals.learningMinutesRecent)} · **insgesamt:** ${formatMinutes(stats.totals.learningMinutes)} in ${stats.totals.sessions} Sessions`,
 		"",
-		`## Gerade dran (letzte ${stats.recentDays} Tage)`,
-		"",
 	];
+	if (stats.exams?.length) {
+		lines.push("## Klausuren", "");
+		for (const e of stats.exams) {
+			lines.push(
+				`### ${cell(e.exam)}${e.date ? ` — ${e.date}` : ""}`,
+				"",
+				`${e.started} von ${e.total} Schwerpunkten angefangen · ${formatMinutes(e.learningMinutes)} · ${e.openQuestions} offene Fragen`,
+				"",
+				"| Schwerpunkt | Gewicht | Stand | Lernzeit | Offene Fragen |",
+				"|---|---|---|---|---|",
+				...e.focuses.map((f) => `| ${cell(f.title)} | ${f.weight ?? "—"} | ${f.started ? `angefangen${f.lastActive ? `, zuletzt ${f.lastActive}` : ""}` : "offen"} | ${formatMinutes(f.learningMinutes)} | ${f.openQuestions} |`),
+				"",
+			);
+		}
+	}
+	lines.push(`## Gerade dran (letzte ${stats.recentDays} Tage)`, "");
 	if (recent.length) {
 		lines.push("| Thema | Rahmen | Lernzeit | Zuletzt | Art | Offene Fragen |", "|---|---|---|---|---|---|");
 		for (const t of recent) {
@@ -404,6 +475,7 @@ function overviewMarkdown(stats: BrainStats): string {
 		"- **Rahmen** ist der Ordner, in dem die Session in LearnHarness liegt (z. B. ein Fach).",
 		"- **Offene Fragen** zählt Antworten mit „Weiß nicht“, falschen oder unsicheren Antworten — nur die Anzahl.",
 		"- Dokumente zum Lernen kommen über den Ordner `LearnHarness/Eingang/` im Brain in LearnHarness hinein.",
+		"- Klausurpläne (z. B. von Claude) kommen nach `LearnHarness/Auftraege/`; jeder Schwerpunkt wird eine Session im Ordner der Klausur.",
 		"",
 		"## Quellen",
 		"",
@@ -472,6 +544,7 @@ export function buildBrainExport(input: BrainExportInput): BrainExport {
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([date, t]) => ({ date, learningMinutes: minutes(t.ms), sessions: t.sessions.size })),
 		topics: summarizeTopics(chats, input.organization, now, idleGapMs),
+		...(input.exams?.length ? { exams: summarizeExams(input.exams, chats, idleGapMs) } : {}),
 		sessions: sessionRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
 	};
 	const files = new Map<string, string>([
