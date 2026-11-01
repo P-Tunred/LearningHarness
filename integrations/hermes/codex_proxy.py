@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 import uuid
@@ -64,7 +65,10 @@ logger = logging.getLogger("learnharness.codex_proxy")
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8646
-MAX_REQUEST_BYTES = 10_000_000
+# LearnHarness' PDF reader sends rendered pages as images and keeps them in the
+# conversation, so one request easily exceeds Hermes' 10 MB default.
+# Override with LH_PROXY_MAX_BODY_MB.
+MAX_REQUEST_BYTES = int(float(os.environ.get("LH_PROXY_MAX_BODY_MB", "100")) * 1024 * 1024)
 DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
 
 
