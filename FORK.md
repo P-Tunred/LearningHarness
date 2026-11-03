@@ -96,12 +96,23 @@ nicht jede Aussage.
   Klausur-Planer in Daily (`lernTempo`, siehe 5). Je Tag geht die Lernzeit
   als `minutesByDay` in den Export, Daily nimmt pro Tag das Größere aus
   seinem Timer und dem Harness.
+  Die Kopfzeile **EXAMS** klappt den Block ein und aus (merkt sich das
+  pro Gerät; eingeklappt zeigt ein Punkt den schlechtesten Stand).
+- **Klausur-Übersicht (`/exams`, „Details“ in der Kopfzeile)**: je Klausur
+  großer Balken mit Soll-Strich, Kacheln (Done, Understood, Today, This
+  week), **„The next days“** = Plan für die nächsten 7 Tage (welches Thema
+  wann wie lange: Rest im eigenen Tempo gleichmäßig bis zur Wiederholung,
+  ab dann je Tag die zwei wackligsten Themen; heute = genau das „Up next“
+  der Leiste, jeden Tag neu gerechnet) und **jedes Thema** mit
+  Durcharbeitung, Verständnis, Lernzeit von geplanter Zeit, Rest und
+  offenen Fragen (Klick öffnet die Session).
 - Code: `src/core/brain-export.ts` (Lernstand + Statistik, ohne
   Dateizugriff), `src/server/brain.ts` (Export, Eingang, Ablauf),
   `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),
   `src/core/exam-plan.ts` + `src/server/exam-plans.ts` (Klausur-Aufträge),
   `src/core/exam-progress.ts` + `app/api/exam-progress/route.ts` +
   `components/exam-progress.tsx` (Klausur-Fortschritt),
+  `components/exam-overview.tsx` + `app/exams/page.tsx` (Übersicht),
   `app/api/brain/route.ts`, `components/settings/brain-section.tsx`. Tests:
   `tests/brain-export.test.ts`, `tests/brain-sync.test.ts`,
   `tests/exam-plan.test.ts`, `tests/exam-plans-sync.test.ts`,

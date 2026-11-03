@@ -63,6 +63,36 @@ export interface TodayFocus {
 	review: boolean;
 }
 
+/** One topic of the plan as the overview page shows it. */
+export interface FocusView {
+	title: string;
+	chatId?: string;
+	weight: Focus["weight"];
+	/** Planned effort in hours (the plan's, or the default). */
+	effortHours: number;
+	started: boolean;
+	finished: boolean;
+	/** Plan nodes worked through, 0…1. */
+	progress: number;
+	/** Share of right answers; null below 3 graded answers. */
+	understanding: number | null;
+	/** progress × understanding, 0…1. */
+	done: number;
+	learningMinutes: number;
+	/** Minutes still needed at Paul's pace (0 when finished). */
+	restMinutes: number;
+	openQuestions: number;
+}
+
+/** One day of the projected plan (an estimate, recomputed every day). */
+export interface ScheduleDay {
+	date: string;
+	phase: "study" | "revision";
+	/** Minutes the day asks for (today: what is still left). */
+	minutes: number;
+	items: TodayFocus[];
+}
+
 export type ExamProgress =
 	| { exam: string; phase: "no-date" | "over" }
 	| {
@@ -100,6 +130,12 @@ export type ExamProgress =
 			upNext: TodayFocus[];
 			focusesDone: number;
 			focusesTotal: number;
+			/** First revision day (YYYY-MM-DD). */
+			reviewFrom: string;
+			/** Every topic of the plan, in the plan's order. */
+			focuses: FocusView[];
+			/** The next days (up to SCHEDULE_DAYS, never past the exam). */
+			schedule: ScheduleDay[];
 	  };
 
 export interface ProgressInput {
@@ -184,6 +220,87 @@ function distribute(order: Array<Focus & { chatId?: string }>, budget: number, r
 	return out;
 }
 
+/** Days the overview page projects ahead. */
+export const SCHEDULE_DAYS = 7;
+const REVISION_TOPICS_PER_DAY = 2;
+
+interface ScheduleInput {
+	focuses: Array<Focus & { chatId?: string }>;
+	today: string;
+	examDate: string;
+	reviewFrom: string;
+	pace: number | null;
+	/** Today's own plan (the strip's "up next") and what it still asks. */
+	upNext: TodayFocus[];
+	leftToday: number;
+	plannedPerDay: number;
+}
+
+/**
+ * The next days, by the same rule as today's target: what is left (at
+ * Paul's pace) spread evenly over the study days until revision, recomputed
+ * for each day as if the days before went to plan. Topics follow the study
+ * order (started first, then the plan's order), split across days where a
+ * topic needs more than a day holds. Revision days rotate through the
+ * shakiest topics, two a day, at the plan's daily measure. Exported for tests.
+ */
+export function projectSchedule(input: ScheduleInput): ScheduleDay[] {
+	const { focuses, today, examDate, reviewFrom, pace, upNext, leftToday, plannedPerDay } = input;
+	const pool = studyOrder(focuses).map((f) => ({ f, left: restMinutesFocus(f, pace) }));
+	const take = (title: string, minutes: number) => {
+		const slot = pool.find((p) => p.f.title === title);
+		if (slot) slot.left = Math.max(0, slot.left - minutes);
+	};
+	const revision = revisionOrder(focuses);
+	const days: ScheduleDay[] = [];
+	for (let d = 0; days.length < SCHEDULE_DAYS; d++) {
+		const date = plusDays(today, d);
+		if (date >= examDate) break;
+		const study = date < reviewFrom;
+		if (d === 0) {
+			// Today is the strip's plan, so both always agree. A rest below the
+			// strip's smallest block still names where to spend it.
+			let items = upNext;
+			if (items.length === 0 && leftToday > 0) {
+				const next = study ? pool.find((p) => p.left > 0)?.f : revision[0];
+				if (next) items = [{ title: next.title, ...(next.chatId ? { chatId: next.chatId } : {}), minutes: leftToday, review: !study || next.openQuestions >= REVIEW_AT_QUESTIONS }];
+			}
+			for (const item of items) if (study) take(item.title, item.minutes);
+			days.push({ date, phase: study ? "study" : "revision", minutes: leftToday, items });
+			continue;
+		}
+		if (study) {
+			const remaining = pool.reduce((s, p) => s + p.left, 0);
+			const budget = to15(remaining / Math.max(1, daysBetween(date, reviewFrom)));
+			const items: TodayFocus[] = [];
+			let rest = budget;
+			for (const p of pool) {
+				if (rest <= 0 || items.length >= MAX_FOCUSES_TODAY) break;
+				if (p.left <= 0) continue;
+				const minutes = Math.min(to15(p.left), rest);
+				if (minutes < MIN_BLOCK_MIN && minutes < to15(p.left)) break;
+				items.push({ title: p.f.title, ...(p.f.chatId ? { chatId: p.f.chatId } : {}), minutes, review: p.f.openQuestions >= REVIEW_AT_QUESTIONS });
+				p.left = Math.max(0, p.left - minutes);
+				rest -= minutes;
+			}
+			days.push({ date, phase: "study", minutes: items.reduce((s, i) => s + i.minutes, 0), items });
+		} else {
+			const budget = to15(plannedPerDay);
+			const n = Math.min(REVISION_TOPICS_PER_DAY, revision.length);
+			const index = Math.max(0, daysBetween(reviewFrom, date));
+			const picked = Array.from({ length: n }, (_, k) => revision[(index * REVISION_TOPICS_PER_DAY + k) % revision.length]!);
+			const each = n > 0 ? to15(budget / n) : 0;
+			days.push({
+				date,
+				phase: "revision",
+				minutes: each * n,
+				items: picked.map((f) => ({ title: f.title, ...(f.chatId ? { chatId: f.chatId } : {}), minutes: each, review: true })),
+			});
+		}
+	}
+	return days;
+}
+
 export function standingOf(deltaHours: number, totalHours: number): Standing {
 	const tolerance = Math.max(TOLERANCE_MIN_H, totalHours * TOLERANCE_SHARE);
 	if (deltaHours > tolerance) return "ahead";
@@ -235,6 +352,7 @@ export function examProgress({ exam, planStart, today, minutesToday, minutesWeek
 	}
 	const leftToday = Math.max(0, targetToday - minutesToday);
 	const order = study ? studyOrder(exam.focuses) : revisionOrder(exam.focuses);
+	const upNext = distribute(order, leftToday, !study, pace);
 
 	return {
 		exam: exam.exam,
@@ -257,9 +375,27 @@ export function examProgress({ exam, planStart, today, minutesToday, minutesWeek
 		targetWeek: Math.round(hoursPerWeek * 60),
 		minutesWeek,
 		plannedPerDay: Math.round(plannedPerDay),
-		upNext: distribute(order, leftToday, !study, pace),
+		upNext,
 		focusesDone: exam.focuses.filter(isFinished).length,
 		focusesTotal: exam.focuses.length,
+		reviewFrom,
+		focuses: exam.focuses.map((f) => ({
+			title: f.title,
+			...(f.chatId ? { chatId: f.chatId } : {}),
+			weight: f.weight,
+			effortHours: effort(f),
+			started: f.started,
+			finished: isFinished(f),
+			progress: f.progress,
+			understanding: f.understanding,
+			done: f.done,
+			learningMinutes: f.learningMinutes,
+			restMinutes: restMinutesFocus(f, pace),
+			openQuestions: f.openQuestions,
+		})),
+		schedule: projectSchedule({
+			focuses: exam.focuses, today, examDate: exam.date, reviewFrom, pace, upNext, leftToday, plannedPerDay,
+		}),
 	};
 }
 

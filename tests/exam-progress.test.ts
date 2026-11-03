@@ -212,3 +212,78 @@ describe("pace that learns (same cases as Daily's tests/lern-tempo.test.mjs)", (
 		assert.equal(p.restHours, 6);
 	});
 });
+
+describe("examProgress — topics and the day-by-day plan (overview page)", () => {
+	it("lists every topic with its own numbers", () => {
+		const p = active(examProgress({
+			exam: exam([
+				focus("A", { started: true, progress: 0.5, understanding: 0.8, done: 0.4, learningMinutes: 120 }),
+				focus("B", { effortHours: null }),
+			]),
+			planStart: "2026-10-31", today: "2026-11-03", minutesToday: 0, minutesWeek: 0,
+		}));
+		assert.equal(p.reviewFrom, "2026-11-25");
+		assert.deepEqual(p.focuses.map((f) => [f.title, f.effortHours, f.started, f.finished]), [["A", 10, true, false], ["B", 4, false, false]]);
+		assert.equal(p.focuses[0]!.progress, 0.5);
+		assert.ok(p.focuses[0]!.restMinutes > 0 && p.focuses[1]!.restMinutes === 240);
+	});
+
+	it("today in the plan is exactly the strip's 'up next'", () => {
+		const p = active(examProgress({ exam: exam([focus("A"), focus("B")]), planStart: "2026-10-31", today: "2026-11-03", minutesToday: 30, minutesWeek: 30 }));
+		assert.equal(p.schedule[0]!.date, "2026-11-03");
+		assert.ok(p.upNext.length > 0);
+		assert.deepEqual(p.schedule[0]!.items, p.upNext);
+		assert.equal(p.schedule[0]!.minutes, p.leftToday);
+	});
+
+	it("a rest below the smallest block still names the next topic for today", () => {
+		// 30 h over 22 days → 90 min; 70 min done leaves 20 min — the strip shows no block.
+		const p = active(examProgress({ exam: exam([focus("A"), focus("B"), focus("C")]), planStart: "2026-10-31", today: "2026-11-03", minutesToday: 70, minutesWeek: 70 }));
+		assert.ok(p.leftToday > 0 && p.leftToday < 30, String(p.leftToday));
+		assert.deepEqual(p.upNext, []);
+		assert.deepEqual(p.schedule[0]!.items.map((i) => [i.title, i.minutes]), [["A", p.leftToday]]);
+	});
+
+	it("projects seven days, in study order, spreading what is left evenly until revision", () => {
+		const p = active(examProgress({ exam: exam([focus("A"), focus("B"), focus("C")]), planStart: "2026-10-31", today: "2026-11-03", minutesToday: 0, minutesWeek: 0 }));
+		assert.equal(p.schedule.length, 7);
+		assert.deepEqual(p.schedule.map((d) => d.date), ["2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09"]);
+		assert.ok(p.schedule.every((d) => d.phase === "study"));
+		// 30 h over 22 study days ≈ 82 min → 90 min a day, topic A first.
+		for (const d of p.schedule) {
+			assert.ok(d.minutes >= 75 && d.minutes <= 105, `${d.date}: ${d.minutes}`);
+			assert.equal(d.minutes % 15, 0);
+		}
+		assert.equal(p.schedule[1]!.items[0]!.title, "A");
+		assert.equal(p.schedule[1]!.items[0]!.chatId, "chat_A");
+	});
+
+	it("moves to the next topic once one is used up, and splits a day between them", () => {
+		const p = active(examProgress({
+			exam: exam([focus("Small", { effortHours: 1 }), focus("Next")], { reviewFrom: "2026-11-06" }),
+			planStart: "2026-11-03", today: "2026-11-03", minutesToday: 0, minutesWeek: 0,
+		}));
+		const titles = p.schedule.filter((d) => d.phase === "study").flatMap((d) => d.items.map((i) => i.title));
+		assert.equal(titles[0], "Small");
+		assert.ok(titles.includes("Next"));
+		const total = p.schedule.filter((d) => d.phase === "study").reduce((s, d) => s + d.minutes, 0);
+		assert.ok(total >= 11 * 60 - 15, `all 11 h are planned before revision (${total} min)`);
+	});
+
+	it("switches to revision days on the review date and never plans past the exam", () => {
+		const p = active(examProgress({
+			exam: exam([focus("A", { understanding: 0.9, done: 0.9 }), focus("Shaky", { understanding: 0.3, done: 0.3 }), focus("C", { done: 0.5, understanding: 0.5 })], { reviewFrom: "2026-11-05", date: "2026-11-08" }),
+			planStart: "2026-10-31", today: "2026-11-03", minutesToday: 0, minutesWeek: 0,
+		}));
+		assert.deepEqual(p.schedule.map((d) => [d.date, d.phase]), [
+			["2026-11-03", "study"], ["2026-11-04", "study"],
+			["2026-11-05", "revision"], ["2026-11-06", "revision"], ["2026-11-07", "revision"],
+		]);
+		const firstRevision = p.schedule[2]!;
+		assert.equal(firstRevision.items[0]!.title, "Shaky", "shakiest first");
+		assert.equal(firstRevision.items.length, 2);
+		assert.ok(firstRevision.items.every((i) => i.review));
+		assert.notDeepEqual(p.schedule[3]!.items.map((i) => i.title), firstRevision.items.map((i) => i.title), "rotates");
+		assert.equal(firstRevision.minutes, 120, "14 h a week = 2 h a day");
+	});
+});
