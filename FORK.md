@@ -221,3 +221,20 @@ Der Testmodus (`desktop:dev`) läuft **neben** der installierten App und hat
 einen eigenen, getrennten Datenordner (`LearnHarness-dev`). Deine echten
 Lernsessions und Keys werden dabei nicht angefasst. API-Key bzw. Provider
 musst du im Testmodus einmal neu eintragen.
+
+### 5. Graphify für Claude Code
+
+[Graphify](https://github.com/Graphify-Labs/graphify) macht aus dem Code
+einen Wissensgraphen (lokal per tree-sitter, keine KI-Kosten). Claude Code
+fragt ihn zuerst (`graphify query/path/explain`), statt Dateien zu
+durchsuchen — spart Tokens.
+
+- `.claude/hooks/session-start.sh` (SessionStart): in Cloud-Sessions npm-
+  Pakete (nur bei Änderungen) und das Graphify-CLI (nur wenn es fehlt)
+  installieren; überall, wo Graphify installiert ist, `graphify update .`
+  (inkrementell). `GRAPHIFY_BACKEND=none`: Graphify ruft nie eine KI auf.
+- `CLAUDE.md` (importiert `AGENTS.md`) mit den Graphify-Regeln,
+  `.claude/skills/graphify/` (Skill `/graphify`, Apache-2.0), Hinweis-Hooks
+  vor Suchen/Lesen in `.claude/settings.json` (stumm, wenn Graphify fehlt).
+- Der Graph (`graphify-out/`) wird nicht committet.
+- Auf dem Mac (lokales Claude Code) einmalig: `uv tool install graphifyy`.

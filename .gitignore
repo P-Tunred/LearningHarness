@@ -22,3 +22,6 @@ xai-credentials.json*
 
 # Python caches (integrations/hermes)
 __pycache__/
+
+# graphify knowledge graph (built per session by .claude/hooks/session-start.sh)
+graphify-out/
