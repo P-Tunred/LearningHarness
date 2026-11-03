@@ -8,8 +8,8 @@ import { DeleteSessionDialog } from "@/components/delete-session-dialog";
 import type { ChatDeleteMode } from "@/src/core";
 import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { ActivitySection } from "@/components/activity-dock";
-import { ExamProgress } from "@/components/exam-progress";
 import { StudyTimer } from "@/components/study-timer";
+import { ExamNotch } from "@/components/exam-notch";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
 import { BrailleSpinner } from "@/components/braille-spinner";
@@ -848,10 +848,6 @@ function SessionsSidebar() {
 					    learner opted out (no ambient signal, user decision). */}
 					<ActivitySection />
 
-					{/* Exam progress (fork addition): ahead of or behind the plan,
-					    and what is left today — only while an exam plan runs. */}
-					<ExamProgress />
-
 					{/* Settings entry (settings-app wave): same row language as
 					    New session — quiet, bottom-pinned, opens the centered
 					    dialog (also mod+, in the keyboard registry). */}
@@ -956,6 +952,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			<FilePathDropZone className="relative min-w-0 flex-1">{children}</FilePathDropZone>
 			{/* Study timer (fork addition): floating, bottom right. */}
 			<StudyTimer />
+			{/* Exam progress notch (fork addition): top centre, folds open.
+			    After the content on purpose: a no-drag carve-out only
+			    subtracts drag regions earlier in the DOM. */}
+			<ExamNotch />
 			{/* The single document-level keydown listener (keyboard wave A) —
 			    after the content in the tree, but it's window-level so order only
 			    matters for the events it dispatches, never for DOM priority. */}

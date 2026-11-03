@@ -83,8 +83,11 @@ nicht jede Aussage.
   bleibt die Schätzung: Zeit zwischen deinen Aktionen in einer Session, Pausen
   über 10 Minuten zählen nicht. Pro Tag und Session gilt das Größere von
   beidem, nie die Summe.
-- **Klausur-Fortschritt (unten in der Seitenleiste)**: Solange ein
-  Klausur-Auftrag läuft, zeigt ein schmaler Block je Klausur (englisch):
+- **Klausur-Fortschritt (Notch oben in der Mitte)**: Solange ein
+  Klausur-Auftrag läuft, hängt oben mittig eine Notch: eingeklappt
+  nächstgelegene Klausur · Stand · heute noch offen + dünner Balken;
+  ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
+  pro Gerät gemerkt). Aufgeklappt eine Karte je Klausur (englisch):
   Balken = wie viel vom Plan erledigt ist (Fortschritt × Verstehen, nach
   Aufwand gewichtet), Strich = wo du bei gleichmäßigem Tempo heute früh
   stündest (gerade Linie vom Tag, an dem der Auftrag gelesen wurde, bis zur
@@ -96,9 +99,7 @@ nicht jede Aussage.
   Klausur-Planer in Daily (`lernTempo`, siehe 5). Je Tag geht die Lernzeit
   als `minutesByDay` in den Export, Daily nimmt pro Tag das Größere aus
   seinem Timer und dem Harness.
-  Die Kopfzeile **EXAMS** klappt den Block ein und aus (merkt sich das
-  pro Gerät; eingeklappt zeigt ein Punkt den schlechtesten Stand).
-- **Klausur-Übersicht (`/exams`, „Details“ in der Kopfzeile)**: je Klausur
+- **Klausur-Übersicht (`/exams`, „Details“ in der aufgeklappten Notch)**: je Klausur
   großer Balken mit Soll-Strich, Kacheln (Done, Understood, Today, This
   week), **„The next days“** = Plan für die nächsten 7 Tage (welches Thema
   wann wie lange: Rest im eigenen Tempo gleichmäßig bis zur Wiederholung,
@@ -111,7 +112,8 @@ nicht jede Aussage.
   `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),
   `src/core/exam-plan.ts` + `src/server/exam-plans.ts` (Klausur-Aufträge),
   `src/core/exam-progress.ts` + `app/api/exam-progress/route.ts` +
-  `components/exam-progress.tsx` (Klausur-Fortschritt),
+  `components/exam-notch.tsx` + `components/exam-progress.tsx` (Notch,
+  Karte, Daten-Hook),
   `components/exam-overview.tsx` + `app/exams/page.tsx` (Übersicht),
   `app/api/brain/route.ts`, `components/settings/brain-section.tsx`. Tests:
   `tests/brain-export.test.ts`, `tests/brain-sync.test.ts`,

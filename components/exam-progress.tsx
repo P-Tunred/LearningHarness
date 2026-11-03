@@ -1,12 +1,10 @@
 "use client";
 
 /**
- * Exam progress strip (fork addition) — bottom of the sidebar, one quiet
- * card per exam plan from the brain: am I ahead of or behind the line,
- * how well does it stick, and how much is left today. A click unfolds
- * what is up next and how the target is computed. The "Exams" header
- * folds the strip away (remembered on this device; a dot keeps the worst
- * standing visible) and "Details" opens the overview page (/exams).
+ * Exam progress pieces (fork addition): the data hook, formatting and the
+ * per-exam card. The card lives in the notch at the top centre of the
+ * window (components/exam-notch.tsx); the overview page (/exams) reuses the
+ * hook and the line bar.
  *
  * English on purpose (Paul, 2026-10-31): the exams are in English, so is
  * everything that plans for them. The numbers come from
@@ -16,9 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDownIcon, GraduationCapIcon, MaximizeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServerEvent, useServerResync } from "@/components/server-events";
 import { UNDERSTANDING_TARGET, type ExamProgress as ExamProgressData, type Standing } from "@/src/core";
@@ -108,7 +104,7 @@ export function LineBar({ p, size = "sm" }: { p: Active; size?: "sm" | "lg" }) {
 	);
 }
 
-function ExamBlock({ p }: { p: Active }) {
+export function ExamBlock({ p }: { p: Active }) {
 	const [open, setOpen] = useState(false);
 	const router = useRouter();
 	const s = STANDING[p.standing];
@@ -180,72 +176,5 @@ function ExamBlock({ p }: { p: Active }) {
 				</div>
 			)}
 		</div>
-	);
-}
-
-/** The strip's open/closed choice, remembered on this device. */
-const OPEN_KEY = "lh.examProgress.open";
-
-function useRememberedOpen(): [boolean, (next: boolean) => void] {
-	const [open, setOpen] = useState(true);
-	useEffect(() => {
-		try {
-			if (window.localStorage.getItem(OPEN_KEY) === "0") setOpen(false);
-		} catch {
-			/* storage unavailable: stays open */
-		}
-	}, []);
-	const set = useCallback((next: boolean) => {
-		setOpen(next);
-		try {
-			window.localStorage.setItem(OPEN_KEY, next ? "1" : "0");
-		} catch {
-			/* storage unavailable: this window only */
-		}
-	}, []);
-	return [open, set];
-}
-
-/** Worst standing first: what the closed header's dot reports. */
-const SEVERITY: Standing[] = ["far-behind", "behind", "on-track", "ahead"];
-
-export function ExamProgress() {
-	const { exams } = useExamProgress();
-	const [open, setOpen] = useRememberedOpen();
-	if (exams.length === 0) return null;
-	const worst = SEVERITY.find((st) => exams.some((p) => p.standing === st)) ?? "on-track";
-	return (
-		<section aria-label="Exam progress" className="flex flex-col gap-2 border-t border-border px-3 pb-2 pt-2">
-			<div className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-muted-foreground/70">
-				<button
-					type="button"
-					onClick={() => setOpen(!open)}
-					aria-expanded={open}
-					aria-controls="exam-progress-blocks"
-					data-testid="exam-progress-toggle"
-					className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left uppercase tracking-widest transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-				>
-					<GraduationCapIcon className="size-3" />
-					<span>Exams</span>
-					{!open && <span className={cn("size-1.5 rounded-full", STANDING[worst].fill)} aria-label={`worst: ${worst}`} />}
-					<ChevronDownIcon className={cn("size-3 transition-transform", !open && "-rotate-90")} />
-				</button>
-				<Link
-					href="/exams"
-					data-testid="exam-progress-details"
-					className="flex items-center gap-1 rounded-sm uppercase tracking-widest transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-				>
-					Details
-					<MaximizeIcon className="size-3" />
-				</Link>
-			</div>
-			{open && (
-				<div id="exam-progress-blocks" className="flex flex-col gap-2">
-					{exams.map((p) => (
-						<ExamBlock key={`${p.exam}|${p.date}`} p={p} />
-					))}
-				</div>
-			)}
-		</section>
 	);
 }
