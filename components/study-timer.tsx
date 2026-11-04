@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * Study timer (fork addition) — a small floating timer at the bottom right:
- * the subject of the chat on screen, today's measured time in it, Start /
- * Pause / Resume (Mod+Shift+T does the same) and Save. Pause is a break;
- * Save ends the study session and books it — Daily takes it over from the
- * brain export as its own study time. A click on the subject opens a short
- * list to book this chat elsewhere.
+ * Study timer (fork addition) — a small floating timer at the bottom right.
+ * The clock is the CURRENT STUDY SESSION (Paul, 2026-11-04): Start / Pause
+ * (a break) / Resume (Mod+Shift+T does the same), and Save ends the session
+ * and books it — the clock goes back to 00:00 for the next one. Beside it,
+ * today's total. A click on the clock opens a small box: this session (since
+ * when), today in total and per subject, when he learned (blocks) and what
+ * he saved today; there the subject can be changed. Daily takes saved
+ * sessions over from the brain export as its own study time.
  *
  * It never starts by itself. While it runs, the window beats every 30 s
  * with the time of the last input; the server ends the run on its own
@@ -34,6 +36,14 @@ interface TimerView {
 	unsavedMs: number;
 	unsavedNoSubjectMs: number;
 	saved?: Array<{ subject: string; day: string; minutes: number }>;
+	summary: {
+		sessionMs: number;
+		sessionStart: number | null;
+		todayTotalMs: number;
+		todayBySubject: Array<{ subject: string | null; ms: number }>;
+		todayBlocks: Array<{ subject: string | null; start: number; end: number; saved: boolean }>;
+		savedToday: Array<{ subject: string; minutes: number; start: number; end: number; savedAt: number }>;
+	};
 	now: number;
 }
 
@@ -71,6 +81,10 @@ function clock(ms: number): string {
 	const s = total % 60;
 	return h > 0 ? `${h}:${String(m).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/** "09:41" in local time. */
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const minutesOf = (ms: number) => Math.round(ms / 60_000);
 
 const chatIdFrom = (pathname: string | null) => /^\/chat\/([^/]+)$/.exec(pathname ?? "")?.[1] ?? null;
 
@@ -165,20 +179,24 @@ function useStudyTimer(chatId: string | null) {
 	}, [post]);
 
 	const now = Date.now() + skew.current;
-	const elapsed = view ? view.todayMs + (view.running ? Math.max(0, now - view.now) : 0) : 0;
+	const sinceRead = view?.running ? Math.max(0, now - view.now) : 0;
+	const session = view ? view.summary.sessionMs + sinceRead : 0;
+	const today = view ? view.summary.todayTotalMs + sinceRead : 0;
 	const askIdle = !!view?.running && (view.askIdle || Date.now() - activeAt.current >= IDLE_ASK_MS);
-	return { view, error, elapsed, askIdle, post, confirmPresence };
+	return { view, error, session, today, sinceRead, askIdle, post, confirmPresence };
 }
 
 export function StudyTimer() {
 	const pathname = usePathname();
 	const chatId = chatIdFrom(pathname);
-	const { view, error, elapsed, askIdle, post, confirmPresence } = useStudyTimer(chatId);
+	const { view, error, session, today, sinceRead, askIdle, post, confirmPresence } = useStudyTimer(chatId);
 	const [picking, setPicking] = useState(false);
+	const [boxOpen, setBoxOpen] = useState(false);
 	const [custom, setCustom] = useState("");
 	const rootRef = useRef<HTMLDivElement>(null);
 	const closePicker = useCallback(() => { setPicking(false); setCustom(""); }, []);
-	usePopoverDismiss(rootRef, picking, closePicker);
+	const closeAll = useCallback(() => { closePicker(); setBoxOpen(false); }, [closePicker]);
+	usePopoverDismiss(rootRef, picking || boxOpen, closeAll);
 
 	const toggle = useCallback(() => void post({ action: "toggle", chatId }), [post, chatId]);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -257,6 +275,17 @@ export function StudyTimer() {
 				</div>
 			)}
 
+			{boxOpen && !picking && (
+				<TimerBox
+					view={view}
+					session={session}
+					today={today}
+					sinceRead={sinceRead}
+					subjectLabel={subjectLabel}
+					onChangeSubject={() => setPicking(true)}
+				/>
+			)}
+
 			{askIdle && (
 				<button
 					type="button"
@@ -274,15 +303,17 @@ export function StudyTimer() {
 				/>
 				<button
 					type="button"
-					onClick={() => setPicking((p) => !p)}
-					aria-expanded={picking}
+					onClick={() => { setBoxOpen((o) => !o); setPicking(false); }}
+					aria-expanded={boxOpen}
 					aria-haspopup="dialog"
-					aria-label={`Subject: ${subjectLabel}. Book this chat to another subject`}
-					title={`${subjectLabel} — measured today. Click to book this chat elsewhere.`}
-					className={cn("flex items-center gap-2 rounded px-0.5 transition-colors hover:text-foreground", view.subject ? "text-muted-foreground" : "text-amber-500")}
+					data-testid="study-timer-open"
+					aria-label={`This session ${clock(session)}, today ${duration(minutesOf(today))} (${subjectLabel}). Show details`}
+					title={`${subjectLabel} — this session. Click for today's details.`}
+					className={cn("flex items-baseline gap-2 rounded px-0.5 transition-colors hover:text-foreground", view.subject ? "text-muted-foreground" : "text-amber-500")}
 				>
 					<span className="hidden max-w-40 truncate min-[1400px]:inline">{subjectLabel}</span>
-					<span className="tabular-nums text-foreground">{clock(elapsed)}</span>
+					<span className="tabular-nums text-foreground" data-testid="study-timer-session">{clock(session)}</span>
+					<span className="hidden tabular-nums text-muted-foreground min-[1100px]:inline">today {duration(minutesOf(today))}</span>
 				</button>
 				<button
 					type="button"
@@ -290,7 +321,7 @@ export function StudyTimer() {
 					data-testid="study-timer-toggle"
 					className="rounded-full px-2.5 py-1 text-foreground transition-colors hover:bg-accent"
 				>
-					{view.running ? "Pause" : elapsed > 0 ? "Resume" : "Start"}
+					{view.running ? "Pause" : session > 0 ? "Resume" : "Start"}
 				</button>
 				{(view.running || view.unsavedMs + view.unsavedNoSubjectMs > 0) && (
 					<button
@@ -314,6 +345,103 @@ export function StudyTimer() {
 					{error ? "Timer unreachable — time is not being saved" : "Paused after 20 min without input"}
 				</p>
 			)}
+		</div>
+	);
+}
+
+/** The expanded box: this session, today, when he learned, what he saved. */
+function TimerBox({
+	view,
+	session,
+	today,
+	sinceRead,
+	subjectLabel,
+	onChangeSubject,
+}: {
+	view: TimerView;
+	session: number;
+	today: number;
+	sinceRead: number;
+	subjectLabel: string;
+	onChangeSubject: () => void;
+}) {
+	const sum = view.summary;
+	// The running block grows with the clock between server reads.
+	const blocks = sum.todayBlocks.map((b, i) =>
+		view.running && i === sum.todayBlocks.length - 1 && !b.saved ? { ...b, end: b.end + sinceRead } : b,
+	);
+	const bySubject = sum.todayBySubject.map((x) =>
+		view.running && x.subject === view.subject ? { ...x, ms: x.ms + sinceRead } : x,
+	);
+	const label = "text-[11px] uppercase tracking-widest text-muted-foreground/70";
+	return (
+		<div role="dialog" aria-label="Study time" data-testid="study-timer-box" className="flex w-72 flex-col gap-3 rounded-xl border bg-card p-3 text-xs shadow-xl">
+			<section className="flex flex-col gap-1">
+				<span className={label}>This session</span>
+				<span className="flex items-baseline gap-2">
+					<span className="text-lg font-medium tabular-nums text-foreground">{clock(session)}</span>
+					<span className="text-muted-foreground">
+						{sum.sessionStart === null ? "not started" : `since ${hhmm(sum.sessionStart)}`}
+						{" · "}
+						{view.running ? <span className="text-green-500">running</span> : sum.sessionStart === null ? "press Start" : "paused"}
+					</span>
+				</span>
+				<span className="flex items-baseline gap-2 text-muted-foreground">
+					<span className={cn("min-w-0 truncate", !view.subject && "text-amber-500")}>{subjectLabel}</span>
+					<button type="button" onClick={onChangeSubject} className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-foreground transition-colors hover:bg-accent">
+						Change subject
+					</button>
+				</span>
+			</section>
+
+			<section className="flex flex-col gap-1">
+				<span className="flex items-baseline">
+					<span className={label}>Today</span>
+					<span className="ml-auto tabular-nums text-foreground">{duration(minutesOf(today))}</span>
+				</span>
+				{bySubject.length === 0 ? (
+					<span className="text-muted-foreground">Nothing measured yet.</span>
+				) : (
+					bySubject.map((x) => (
+						<span key={x.subject ?? "-"} className="flex items-baseline gap-2 text-muted-foreground">
+							<span className={cn("min-w-0 truncate", !x.subject && "text-amber-500")}>{x.subject ?? "No subject"}</span>
+							<span className="ml-auto tabular-nums">{duration(minutesOf(x.ms))}</span>
+						</span>
+					))
+				)}
+			</section>
+
+			{blocks.length > 0 && (
+				<section className="flex flex-col gap-1">
+					<span className={label}>When you learned</span>
+					<ul className="flex max-h-32 flex-col gap-0.5 overflow-y-auto">
+						{blocks.map((b) => (
+							<li key={b.start} className="flex items-baseline gap-2 tabular-nums text-muted-foreground">
+								<span className="text-foreground">{hhmm(b.start)}–{hhmm(b.end)}</span>
+								<span className="min-w-0 truncate">{b.subject ?? "No subject"}</span>
+								<span className={cn("ml-auto shrink-0", b.saved ? "text-green-500" : "text-muted-foreground/70")}>{b.saved ? "saved" : "open"}</span>
+							</li>
+						))}
+					</ul>
+				</section>
+			)}
+
+			<section className="flex flex-col gap-1">
+				<span className={label}>Saved today</span>
+				{sum.savedToday.length === 0 ? (
+					<span className="text-muted-foreground">Nothing saved yet — Save ends a session.</span>
+				) : (
+					<ul className="flex max-h-32 flex-col gap-0.5 overflow-y-auto">
+						{sum.savedToday.map((x) => (
+							<li key={`${x.savedAt}|${x.subject}`} className="flex items-baseline gap-2 tabular-nums text-muted-foreground">
+								<span className="text-foreground">{hhmm(x.savedAt)}</span>
+								<span className="min-w-0 truncate">{x.subject}</span>
+								<span className="ml-auto shrink-0" title={`${hhmm(x.start)}–${hhmm(x.end)}`}>{duration(x.minutes)}</span>
+							</li>
+						))}
+					</ul>
+				)}
+			</section>
 		</div>
 	);
 }

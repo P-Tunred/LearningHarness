@@ -131,8 +131,13 @@ LearnHarness starten; Cmd+Q beendet alles. Anleitung:
 
 Ein kleiner Timer unten rechts im Fenster (unter 1100 px Breite oben rechts
 unter der Titelleiste, damit er nie über der Eingabe liegt): Fach des Chats,
-heute darin gemessene Zeit (mm:ss, ab einer Stunde h:mm), ein Knopf
-Start / Pause / Resume und **Save**. **Mod+Shift+T** (Cmd auf dem Mac) startet
+die **Zeit der laufenden Lernsession** (mm:ss, ab einer Stunde h:mm; nach
+**Save** wieder 00:00 für die nächste Session), daneben „today“ = heute
+gesamt, ein Knopf Start / Pause / Resume und **Save**. Ein **Klick auf die
+Uhr** öffnet eine kleine Box: diese Session (seit wann, läuft/pausiert,
+Fach ändern), heute gesamt und pro Fach, „When you learned“ (die
+Lernabschnitte mit Uhrzeit, gespeichert/offen) und „Saved today“ (wann
+welche Session gespeichert wurde). Esc oder Klick daneben schließt sie. **Mod+Shift+T** (Cmd auf dem Mac) startet
 und pausiert, siehe
 [docs/keyboard.md](docs/keyboard.md). Ein Punkt zeigt den Zustand: grün = läuft,
 gelb = Chat ohne Fach. Sonst keine Animation. Beschriftung englisch wie der

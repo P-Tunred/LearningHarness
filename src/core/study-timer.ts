@@ -393,6 +393,67 @@ export function todayForSubject(state: TimerState, now: number, subject: string 
 	return msByDay(allPieces(state, now), (p) => p.subject === subject).get(today) ?? 0;
 }
 
+/** Two pieces this close together (and same subject) show as one block. */
+const BLOCK_JOIN_MS = 60_000;
+
+/** What the expanded timer box shows (fork addition, Paul 2026-11-04). */
+export interface TimerSummary {
+	/** The study session not saved yet (all subjects, running piece included), ms. */
+	sessionMs: number;
+	/** When that session's first unsaved piece began; null = no session yet. */
+	sessionStart: number | null;
+	/** Everything measured today, all subjects. */
+	todayTotalMs: number;
+	/** Today per subject (null = no subject), largest first. */
+	todayBySubject: Array<{ subject: string | null; ms: number }>;
+	/** Today's learning blocks in time order: when Paul actually learned. */
+	todayBlocks: Array<{ subject: string | null; start: number; end: number; saved: boolean }>;
+	/** Sessions saved for today, newest save first. */
+	savedToday: Array<{ subject: string; minutes: number; start: number; end: number; savedAt: number }>;
+}
+
+/** Session, today and saved sessions for the timer box. Pure. */
+export function timerSummary(state: TimerState, now: number): TimerSummary {
+	const today = dayOf(now);
+	const pieces = allPieces(state, now);
+	let sessionMs = 0;
+	let sessionStart: number | null = null;
+	const bySubject = new Map<string | null, number>();
+	const segs: Array<{ subject: string | null; start: number; end: number; saved: boolean }> = [];
+	for (const p of pieces) {
+		if (p.savedAt === undefined) {
+			sessionMs += p.end - p.start;
+			sessionStart = sessionStart === null ? p.start : Math.min(sessionStart, p.start);
+		}
+		for (const [day, from, to] of segments(p)) {
+			if (day !== today || to <= from) continue;
+			bySubject.set(p.subject, (bySubject.get(p.subject) ?? 0) + (to - from));
+			segs.push({ subject: p.subject, start: from, end: to, saved: p.savedAt !== undefined });
+		}
+	}
+	segs.sort((a, b) => a.start - b.start);
+	const todayBlocks: TimerSummary["todayBlocks"] = [];
+	for (const seg of segs) {
+		const last = todayBlocks[todayBlocks.length - 1];
+		if (last && last.subject === seg.subject && last.saved === seg.saved && seg.start - last.end <= BLOCK_JOIN_MS) {
+			last.end = Math.max(last.end, seg.end);
+		} else {
+			todayBlocks.push({ ...seg });
+		}
+	}
+	return {
+		sessionMs,
+		sessionStart,
+		todayTotalMs: [...bySubject.values()].reduce((a, b) => a + b, 0),
+		todayBySubject: [...bySubject.entries()].map(([subject, ms]) => ({ subject, ms })).sort((a, b) => b.ms - a.ms),
+		todayBlocks: todayBlocks.filter((b) => b.end - b.start >= MIN_PIECE_MS),
+		savedToday: state.sessions
+			.filter((x) => x.day === today)
+			.map(({ subject, minutes, start, end, savedAt }) => ({ subject, minutes, start, end, savedAt }))
+			.sort((a, b) => b.savedAt - a.savedAt),
+	};
+}
+
 /** Validate a stored state; anything malformed falls back to empty pieces. */
 export function parseTimerState(raw: unknown): TimerState {
 	const base = emptyTimerState();

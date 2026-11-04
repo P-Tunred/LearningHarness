@@ -27,10 +27,12 @@ import {
 	subjectChoices,
 	subjectForChat,
 	switchContext,
+	timerSummary,
 	todayForSubject,
 	unsavedMs,
 	type SubjectSources,
 	type TimerState,
+	type TimerSummary,
 } from "../core/study-timer.ts";
 import { configuredBrainFolder, usableFolder } from "./brain-folder.ts";
 import { examOverviews } from "./exam-plans.ts";
@@ -85,6 +87,8 @@ export interface TimerView {
 	unsavedNoSubjectMs: number;
 	/** Only in the answer to Save: what it saved. */
 	saved?: Array<{ subject: string; day: string; minutes: number }>;
+	/** Current session, today and saved sessions (the expanded box). */
+	summary: TimerSummary;
 	now: number;
 }
 
@@ -103,6 +107,7 @@ function view(state: TimerState, now: number, sources: SubjectSources): TimerVie
 		choices: subjectChoices(sources),
 		unsavedMs: unsaved.withSubject,
 		unsavedNoSubjectMs: unsaved.withoutSubject,
+		summary: timerSummary(state, now),
 		now,
 	};
 }
