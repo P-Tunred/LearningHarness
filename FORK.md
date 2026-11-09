@@ -107,6 +107,22 @@ nicht jede Aussage.
   der Leiste, jeden Tag neu gerechnet) und **jedes Thema** mit
   Durcharbeitung, Verständnis, Lernzeit von geplanter Zeit, Rest und
   offenen Fragen (Klick öffnet die Session).
+- **Durchgearbeitet**: erledigte Schritte des Plans zählen ganz, der Schritt,
+  an dem du gerade bist, halb – sobald du eine Frage dazu beantwortet hast
+  (auch „weiß nicht“), ganz. Sonst bliebe der letzte Schritt ewig „aktuell“
+  und 100 % unerreichbar. Ein Thema ist **fertig** bei Durchgearbeitet ×
+  Verstanden ≥ 90 % und 0 offenen Fragen (streng, so gewollt).
+- **Offene Fragen** (`src/core/open-questions.ts`): jede bewertete Frage,
+  die du mit „weiß nicht“, falsch oder richtig aber unsicher (Sicherheit
+  < 50) beantwortet hast. Sie bleibt offen, bis der Tutor sie noch einmal
+  stellt (gleich oder umformuliert, Quiz mit `revisits: <id>`) und du sie
+  **richtig und sicher** beantwortest; eine falsche/unsichere Wiederholung
+  lässt sie offen, ohne eine zweite zu zählen. Der Tutor hat dafür das
+  Werkzeug `open_questions` (offene Fragen dieses Chats mit id, nur bei
+  Multiple Choice – freie Antworten werden nicht bewertet). In der
+  Übersicht öffnet ein Klick auf „N open questions“ die Liste mit Grund
+  (`GET /api/open-questions?chatId=…`, erst beim Klick geladen – die Texte
+  gehen nicht in den Export).
 - Code: `src/core/brain-export.ts` (Lernstand + Statistik, ohne
   Dateizugriff), `src/server/brain.ts` (Export, Eingang, Ablauf),
   `src/server/brain-folder.ts` (Ordner, Prompt-Abschnitt),

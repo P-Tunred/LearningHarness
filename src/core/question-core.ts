@@ -264,6 +264,17 @@ export const quizInputObject = Type.Object({
 			"one node for as many turns as the understanding needs — one reasoning step at a time, never rush forward. " +
 			"For off-map checks use ask_user_question.",
 	}),
+	// Fork addition (Paul, 2026-11-09): re-asking an open question. The
+	// ledger (core/open-questions.ts) closes it on a right and sure answer.
+	// Right after the required pair, by the same reasoning: fields
+	// generated first get dropped least.
+	revisits: Type.Optional(
+		Type.String({
+			description:
+				"Optional. The id of an open question (from open_questions) that this question re-asks, same or reworded — " +
+				"validated at call time. A right and confident answer closes that open question; any other answer keeps it open.",
+		}),
+	),
 	...quizInputBase.properties,
 });
 

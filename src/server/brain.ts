@@ -33,6 +33,7 @@ import {
 } from "../core/brain-export.ts";
 import { examProgress, minutesTodayAndWeek, type ExamProgress } from "../core/exam-progress.ts";
 import { allPieces, settle } from "../core/study-timer.ts";
+import { questionLedger, type OpenQuestion } from "../core/open-questions.ts";
 import { readTimerState } from "./study-timer.ts";
 import type { ChatRecord } from "../core/contracts/chat.ts";
 import { emit, subscribe } from "../core/events.ts";
@@ -147,6 +148,13 @@ function readManifest(exportDir: string): Manifest {
 		if (raw && raw.version === 1 && raw.files && typeof raw.files === "object") return { version: 1, files: { ...raw.files } };
 	} catch { /* first export or unreadable → start fresh */ }
 	return { version: 1, files: {} };
+}
+
+/** The open questions of one chat (the exam overview's list, fetched on
+ *  click so the texts never ride the export). null = no such chat. */
+export function openQuestionsOf(chatId: string): OpenQuestion[] | null {
+	const record = stores.chatStore.getChat(chatId);
+	return record ? questionLedger(record.messages).open : null;
 }
 
 function readAllChats(): ChatRecord[] {

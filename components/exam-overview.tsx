@@ -8,11 +8,13 @@
  * English like everything that plans for the exams.
  */
 
+import { useState } from "react";
 import Link from "next/link";
-import { CalendarDaysIcon, CheckIcon, CircleDashedIcon, CircleDotIcon, FlagIcon, RotateCcwIcon } from "lucide-react";
+import { CalendarDaysIcon, CheckIcon, ChevronRightIcon, CircleDashedIcon, CircleDotIcon, FlagIcon, RotateCcwIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopBar } from "@/components/top-bar";
-import { UNDERSTANDING_TARGET, type FocusView, type ScheduleDay } from "@/src/core";
+import { ToolContentResponse } from "@/components/ai-elements/message";
+import { UNDERSTANDING_TARGET, type FocusView, type OpenQuestion, type OpenReason, type ScheduleDay } from "@/src/core";
 import { type Active, hm, LineBar, pct, STANDING, standingLabel, useExamProgress } from "@/components/exam-progress";
 
 /** "2026-11-03" → "Tue 3 Nov" (local calendar day, no time-zone shift). */
@@ -79,17 +81,98 @@ function TopicRow({ f }: { f: FocusView }) {
 			<span className="flex gap-3 text-xs tabular-nums text-muted-foreground">
 				<span>{status.label}</span>
 				{!f.finished && <span>· about {hm(f.restMinutes)} left</span>}
-				{f.openQuestions > 0 && <span className="text-amber-500">· {f.openQuestions} open {f.openQuestions === 1 ? "question" : "questions"}</span>}
+				{f.openQuestions > 0 && !f.chatId && <span className="text-amber-500">· {f.openQuestions} open {f.openQuestions === 1 ? "question" : "questions"}</span>}
 			</span>
 		</>
 	);
 	const cls = "flex flex-col gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2.5 transition-colors";
-	return f.chatId ? (
-		<Link href={`/chat/${f.chatId}`} className={cn(cls, "hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring")}>
-			{body}
-		</Link>
-	) : (
-		<div className={cls}>{body}</div>
+	if (!f.chatId) return <div className={cls}>{body}</div>;
+	// The list toggle sits OUTSIDE the link (no button inside an anchor).
+	return (
+		<div className="flex flex-col rounded-lg border border-border/60 bg-card/50">
+			<Link
+				href={`/chat/${f.chatId}`}
+				className="flex flex-col gap-2 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+			>
+				{body}
+			</Link>
+			{f.openQuestions > 0 && <OpenQuestions chatId={f.chatId} count={f.openQuestions} />}
+		</div>
+	);
+}
+
+const REASON_LABEL: Record<OpenReason, string> = {
+	dontKnow: "don't know",
+	incorrect: "wrong",
+	lowConfidence: "right, but unsure",
+};
+
+/**
+ * "N open questions" (Paul, 2026-11-09): opens the list of what is still
+ * open in this topic's chat and why. Loaded on click from
+ * /api/open-questions, so the texts never travel with the export. A
+ * question closes when the tutor re-asks it and he answers right and sure.
+ */
+function OpenQuestions({ chatId, count }: { chatId: string; count: number }) {
+	const [open, setOpen] = useState(false);
+	const [list, setList] = useState<OpenQuestion[] | null>(null);
+	const [failed, setFailed] = useState(false);
+	const toggle = async () => {
+		const next = !open;
+		setOpen(next);
+		if (!next) return;
+		setFailed(false);
+		try {
+			const res = await fetch(`/api/open-questions?chatId=${encodeURIComponent(chatId)}`, { cache: "no-store" });
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			setList((await res.json()) as OpenQuestion[]);
+		} catch (err) {
+			console.error("[open-questions]", err);
+			setFailed(true);
+		}
+	};
+	return (
+		<div className="flex flex-col gap-2 border-t border-border/60 px-3 py-2 text-xs">
+			<button
+				type="button"
+				onClick={() => void toggle()}
+				aria-expanded={open}
+				data-testid="open-questions-toggle"
+				className="flex items-center gap-1 self-start rounded text-amber-500 transition-colors hover:text-amber-400"
+			>
+				<ChevronRightIcon className={cn("size-3 transition-transform", open && "rotate-90")} />
+				{count} open {count === 1 ? "question" : "questions"}
+			</button>
+			{open && (
+				<div className="flex flex-col gap-2" data-testid="open-questions-list">
+					{failed ? (
+						<span className="text-muted-foreground">Could not load the questions.</span>
+					) : list === null ? (
+						<span className="text-muted-foreground">Loading…</span>
+					) : (
+						<>
+							<ol className="flex max-h-96 flex-col gap-2 overflow-y-auto">
+								{list.map((q) => (
+									<li key={q.id} className="flex flex-col gap-0.5 rounded-md bg-background/40 px-2.5 py-1.5">
+										<span className="text-[11px] uppercase tracking-widest text-amber-500/80">
+											{REASON_LABEL[q.reason]}
+											{q.answeredAt && <span className="normal-case tracking-normal text-muted-foreground/70"> · {new Date(q.answeredAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span>}
+										</span>
+										<div className="text-sm text-foreground">
+											<ToolContentResponse>{q.question}</ToolContentResponse>
+										</div>
+									</li>
+								))}
+							</ol>
+							<span className="text-muted-foreground">
+								To close them: open the chat and ask the tutor to go through your open questions. A question closes when you answer it
+								right and sure.
+							</span>
+						</>
+					)}
+				</div>
+			)}
+		</div>
 	);
 }
 

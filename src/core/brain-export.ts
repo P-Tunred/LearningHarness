@@ -22,6 +22,7 @@
  */
 import type { ChatRecord } from "./contracts/chat.ts";
 import { derivePlanStatusesLh } from "./contracts/plan.ts";
+import { questionLedger, type OpenReason } from "./open-questions.ts";
 import type { LhMessage } from "./native-messages.ts";
 import type { DerivedGraph } from "./graph.ts";
 import type { SourceOrganization } from "./source-organization.ts";
@@ -47,8 +48,6 @@ export const RECENT_DAYS = 14;
 export const TIMER_EXPORT_DAYS = 28;
 /** How many older topics the overview still lists. */
 const MAX_OLDER_TOPICS = 30;
-/** Below this self-reported confidence a correct answer still counts as unsure. */
-const LOW_CONFIDENCE = 50;
 
 // ─── Learning time ───────────────────────────────────────────────────────────
 
@@ -108,7 +107,7 @@ function answerDetails(m: unknown): AnswerDetails | null {
 	return typeof details.questionText === "string" ? details : null;
 }
 
-export type UnsureReason = "dontKnow" | "incorrect" | "lowConfidence";
+export type UnsureReason = OpenReason;
 
 export interface UnsureItem {
 	question: string;
@@ -169,10 +168,11 @@ export function digestSession(record: ChatRecord, idleGapMs = IDLE_GAP_MS, measu
 		const r = m as { role?: unknown; isError?: unknown; toolCallId?: unknown };
 		if (r.role === "toolResult" && r.isError === true && typeof r.toolCallId === "string") failedCalls.add(r.toolCallId);
 	}
-	let questions = 0;
-	let graded = 0;
-	let correct = 0;
-	const unsure: UnsureItem[] = [];
+	// Graded answers and what is still open (src/core/open-questions.ts):
+	// a question re-asked and answered right and sure no longer counts.
+	const ledger = questionLedger(record.messages);
+	const { questions, graded, correct } = ledger;
+	const unsure: UnsureItem[] = ledger.open.map(({ question, reason, confidence }) => ({ question, reason, ...(confidence !== undefined ? { confidence } : {}) }));
 	const learnerQuestions: string[] = [];
 	for (const m of record.messages) {
 		const text = userText(m);
@@ -186,21 +186,6 @@ export function digestSession(record: ChatRecord, idleGapMs = IDLE_GAP_MS, measu
 					practice[outcome as PracticeOutcome]++;
 				}
 			}
-		}
-		const d = answerDetails(m);
-		if (!d || d.dismissed === true || d.kind === "ask") continue;
-		questions++;
-		const question = String(d.questionText).trim();
-		if (d.dontKnow === true) {
-			unsure.push({ question, reason: "dontKnow" });
-			continue;
-		}
-		const confidence = typeof d.confidence === "number" && Number.isFinite(d.confidence) ? d.confidence : undefined;
-		if (typeof d.correct === "boolean") {
-			graded++;
-			if (d.correct) correct++;
-			if (!d.correct) unsure.push({ question, reason: "incorrect", ...(confidence !== undefined ? { confidence } : {}) });
-			else if (confidence !== undefined && confidence < LOW_CONFIDENCE) unsure.push({ question, reason: "lowConfidence", confidence });
 		}
 	}
 	const byDay = withMeasured(learningTimeByDay(actionTimestamps(record), idleGapMs), measured.get(record.id));
@@ -483,7 +468,12 @@ export function summarizeExams(
 			let progress = 0;
 			if (chat && tree && planNodes > 0) {
 				const s = derivePlanStatusesLh(tree, chat.messages as unknown as LhMessage[]);
-				progress = Math.min(1, (s.visited.size + (s.current ? 0.5 : 0)) / planNodes);
+				// The step he is on counts half until he answered a question on
+				// it, then fully (Paul, 2026-11-09): otherwise the plan's last
+				// step stays "current" forever and 100 % is out of reach.
+				const answered = questionLedger(chat.messages).answeredNodes;
+				const currentShare = s.current ? (answered.has(s.current) ? 1 : 0.5) : 0;
+				progress = Math.min(1, (s.visited.size + currentShare) / planNodes);
 			}
 			const understanding = d && d.graded >= MIN_GRADED_FOR_UNDERSTANDING ? d.correct / d.graded : null;
 			return {

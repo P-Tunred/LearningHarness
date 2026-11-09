@@ -55,7 +55,7 @@ export { claudeCodeInstallationResponse } from "./claude-code.ts";
 export * from "./custom-provider.ts";
 export { customProviderGet, customProviderMutation } from "./custom-provider-http.ts";
 // Second Brain link (fork addition): export to / import from a Markdown folder.
-export { brainStatus, examProgressNow, startBrainSync, type BrainStatus } from "./brain.ts";
+export { brainStatus, examProgressNow, openQuestionsOf, startBrainSync, type BrainStatus } from "./brain.ts";
 export { examOpeningPrompt } from "./exam-plans.ts";
 // Study timer (fork addition): measured learning time per subject.
 export { TimerActionError, parseTimerAction, studyTimerAction, studyTimerView, type TimerView } from "./study-timer.ts";

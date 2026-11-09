@@ -18,6 +18,7 @@ import type { JobStore } from "../core/ports.ts";
 import { jobTools, type DemoInput, type PdfInput, type ResearchInput, type VisualInput } from "./tools/jobs.ts";
 import { planTools, type PlanToolContext } from "./tools/plan.ts";
 import { probeDoneTool, type ProbeDoneContext } from "./tools/probe.ts";
+import { openQuestionsTool, revisitsProblem } from "./tools/open-questions.ts";
 import { proberGraphTools } from "./tools/graph.ts";
 import { readTool } from "./tools/read.ts";
 import { lsTool } from "./tools/ls.ts";
@@ -384,6 +385,8 @@ export function teachQuizToolFor(ctx: Pick<PlanToolContext, "chatId" | "chatStor
 			const problems = [...quizInputProblems(input)];
 			const nodeIdProblemText = nodeIdProblem(ctx, input.nodeId);
 			if (nodeIdProblemText) problems.push(nodeIdProblemText);
+			const revisitsProblemText = revisitsProblem(ctx, input.revisits);
+			if (revisitsProblemText) problems.push(revisitsProblemText);
 			if (problems.length > 0) return invalidInputResult("quiz", problems);
 			return questionResult();
 		},
@@ -458,6 +461,10 @@ export function createTeacherTools(
 			find: findTool,
 			grep: grepTool,
 			...planTools(ctx),
+			// Fork addition (Paul, 2026-11-09): the learner's open questions.
+			// The re-ask path (quiz.revisits) exists in multiple-choice
+			// mechanics only — free recall is not graded, so it cannot close one.
+			...(mechanics === "choice" ? { open_questions: openQuestionsTool(ctx) } : {}),
 			...jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable }),
 		},
 		withoutMechanics(enabled),
