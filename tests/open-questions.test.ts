@@ -152,6 +152,9 @@ describe("tutor seam", () => {
 
 	it("quiz.revisits must name an open question of this chat", () => {
 		assert.equal(revisitsProblem(ctx, undefined), null);
+		assert.equal(revisitsProblem(ctx, ""), null, "an empty field means none — no needless retry");
+		assert.equal(revisitsProblem(ctx, "  "), null);
+		assert.equal(revisitsProblem(ctx, " a "), null, "ids are trimmed");
 		assert.equal(revisitsProblem(ctx, "a"), null);
 		assert.match(revisitsProblem(ctx, "zzz") ?? "", /not an open question/);
 	});

@@ -36,8 +36,11 @@ export function openQuestionsText(messages: readonly unknown[]): string {
 }
 
 /** The `revisits` check the teach quiz chains after its own contract. */
-export function revisitsProblem(ctx: Pick<PlanToolContext, "chatId" | "chatStore">, revisits: string | undefined): string | null {
-	if (revisits === undefined) return null;
+export function revisitsProblem(ctx: Pick<PlanToolContext, "chatId" | "chatStore">, raw: string | undefined): string | null {
+	// Models often fill an optional field with "" — that means "none", not
+	// an id (it caused needless "Retrying…" rounds). The ledger trims too.
+	const revisits = raw?.trim();
+	if (!revisits) return null;
 	const open = questionLedger(ctx.chatStore.getChat(ctx.chatId)?.messages ?? []).open;
 	if (open.some((q) => q.id === revisits)) return null;
 	return (
