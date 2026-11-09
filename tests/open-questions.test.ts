@@ -160,13 +160,21 @@ describe("tutor seam", () => {
 		assert.equal(out.openQuestions[0]!.nodeId, "n1");
 	});
 
-	it("quiz.revisits must name an open question of this chat", () => {
+	it("quiz.revisits: open ids, re-ask ids and other questions pass; only unknown ids are rejected", () => {
 		assert.equal(revisitsProblem(ctx, undefined), null);
 		assert.equal(revisitsProblem(ctx, ""), null, "an empty field means none — no needless retry");
 		assert.equal(revisitsProblem(ctx, "  "), null);
 		assert.equal(revisitsProblem(ctx, " a "), null, "ids are trimmed");
 		assert.equal(revisitsProblem(ctx, "a"), null);
-		assert.match(revisitsProblem(ctx, "zzz") ?? "", /not an open question/);
+		assert.match(revisitsProblem(ctx, "zzz") ?? "", /names no question of this session/);
+		// A guess or probe question is not open, but re-asking it is fine:
+		// it goes through as a new check (Paul, 2026-11-09).
+		const guesses = [...qa("pr", { correct: false }, { tool: "probe" }), ...qa("pd", { dontKnow: true }, { type: "predict" })];
+		const g = { chatId: "c1", chatStore: { getChat: () => ({ messages: guesses }) } } as never;
+		assert.equal(revisitsProblem(g, "pr"), null);
+		assert.equal(revisitsProblem(g, "pd"), null);
+		const l = questionLedger([...guesses, ...qa("n", { correct: false }, { revisits: "pr" })]);
+		assert.deepEqual(l.open.map((q) => q.id), ["n"], "it counts as a new check of its own");
 	});
 });
 

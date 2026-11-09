@@ -62,7 +62,7 @@ for (const { f } of files) {
 		const when = typeof m.timestamp === "number" ? new Date(m.timestamp).toLocaleString() : "";
 		const text = textOf(m.content).replace(/\s+/g, " ").trim();
 		console.log(`- ${when}  ${m.toolName ?? "?"}: ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`);
-		const rejected = /revisits "([^"]+)" is not an open question/.exec(text)?.[1];
+		const rejected = /revisits "([^"]+)" (?:is not an open question|names no question)/.exec(text)?.[1];
 		if (rejected) console.log(`    → ${rejected} is ${describe(rejected)}`);
 	}
 }
