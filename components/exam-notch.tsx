@@ -7,7 +7,10 @@
  * open: one card per exam (line bar, done/understood, today, up next with
  * links into the sessions) and "Details" to the overview page (/exams).
  * In a topic chat of an exam plan the closed notch speaks for THAT exam and
- * adds the topic's own Done bar under the total.
+ * adds the topic's own Done bar under the total — on hover its two parts,
+ * worked through and understood. Chats start their top bar below the
+ * resting notch (NOTCH_HEIGHT_VAR, TopBar clearNotch), so it never covers
+ * the title.
  * Escape or a click outside folds it back; the open/closed choice is
  * remembered on this device. Hidden while no exam plan runs.
  */
@@ -19,6 +22,7 @@ import { ChevronDownIcon, MaximizeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Active, ExamBlock, hm, pct, STANDING, standingLabel, useExamProgress } from "@/components/exam-progress";
 import { XpFloat } from "@/components/xp-float";
+import { UNDERSTANDING_TARGET } from "@/src/core";
 
 const OPEN_KEY = "lh.examNotch.open";
 
@@ -62,6 +66,20 @@ export function topicOfChat<T extends { focuses: ReadonlyArray<{ chatId?: string
 	return undefined;
 }
 
+/** CSS variable with the closed notch's resting height (TopBar clearNotch). */
+export const NOTCH_HEIGHT_VAR = "--lh-notch-h";
+
+function TopicBar({ value, className, label }: { value: number; className: string; label: string }) {
+	return (
+		<span className="relative block h-1 w-full rounded-full bg-border" role="img" aria-label={label}>
+			<span
+				className={cn("absolute inset-y-0 left-0 rounded-full transition-[width] duration-500", className)}
+				style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }}
+			/>
+		</span>
+	);
+}
+
 const chatIdFrom = (pathname: string | null) => /^\/chat\/([^/]+)$/.exec(pathname ?? "")?.[1] ?? null;
 
 /** "25 min to go" / "done ✓" for the closed notch. Exported for tests. */
@@ -75,6 +93,37 @@ export function ExamNotch() {
 	const pathname = usePathname();
 	const [open, setOpen] = useRememberedOpen();
 	const ref = useRef<HTMLDivElement>(null);
+	const toggleRef = useRef<HTMLButtonElement>(null);
+	// Hover shows the topic's two bars (Paul, 2026-11-09).
+	const [hover, setHover] = useState(false);
+	const hoverRef = useRef(false);
+	const topic = topicOfChat(exams, chatIdFrom(pathname));
+	const p = topic?.exam ?? nearestExam(exams);
+	const shown = !!p;
+
+	// The resting height of the closed notch, for the chat's top bar to
+	// start below it (TopBar clearNotch). Measured on the toggle row — the
+	// folded-open panel hangs below it — and never while hovering, so the
+	// two hover bars do not make the chat jump.
+	useEffect(() => {
+		const root = document.documentElement;
+		const el = toggleRef.current;
+		if (!shown || !el) return;
+		const measure = () => {
+			if (!hoverRef.current) root.style.setProperty(NOTCH_HEIGHT_VAR, `${Math.ceil(el.getBoundingClientRect().height)}px`);
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => {
+			ro.disconnect();
+			root.style.removeProperty(NOTCH_HEIGHT_VAR);
+		};
+	}, [shown]);
+	const setHovering = (on: boolean) => {
+		hoverRef.current = on;
+		setHover(on);
+	};
 
 	// Escape and outside clicks fold it back. Escape is claimed at the
 	// document (the one-Esc law, as the settings dialog does) so it does not
@@ -98,8 +147,6 @@ export function ExamNotch() {
 		};
 	}, [open, setOpen]);
 
-	const topic = topicOfChat(exams, chatIdFrom(pathname));
-	const p = topic?.exam ?? nearestExam(exams);
 	if (!p) return null;
 	const s = STANDING[p.standing];
 	const more = exams.length - 1;
@@ -111,12 +158,15 @@ export function ExamNotch() {
 		<div
 			ref={ref}
 			data-testid="exam-notch"
+			onMouseEnter={() => setHovering(true)}
+			onMouseLeave={() => setHovering(false)}
 			className={cn(
 				"lh-no-drag fixed left-1/2 top-0 z-40 -translate-x-1/2 overflow-hidden rounded-b-2xl border border-t-0 border-border bg-card/95 shadow-lg backdrop-blur transition-[width] duration-200",
 				open ? "w-[min(26rem,calc(100vw-1.5rem))]" : "w-max max-w-[calc(100vw-10rem)]",
 			)}
 		>
 			<button
+				ref={toggleRef}
 				type="button"
 				onClick={() => setOpen(!open)}
 				aria-expanded={open}
@@ -141,19 +191,37 @@ export function ExamNotch() {
 				</span>
 				{topic && (
 					// This chat's topic: Done = worked through × understood, the
-					// same measure as the total. `w-0 min-w-full` keeps a long
-					// title from widening the notch.
+					// same measure as the total; on hover its two parts instead.
+					// `w-0 min-w-full` keeps a long title from widening the notch.
 					<span className="flex w-0 min-w-full flex-col gap-1 pt-0.5" data-testid="exam-notch-topic">
 						<span className="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
 							<span className="min-w-0 truncate">{topic.focus.title}</span>
-							<span className="ml-auto shrink-0 text-foreground">{pct(topic.focus.done)}</span>
+							{!hover && <span className="ml-auto shrink-0 text-foreground">{pct(topic.focus.done)}</span>}
 						</span>
-						<span className="relative block h-1 w-full rounded-full bg-border" role="img" aria-label={`This topic: ${pct(topic.focus.done)} done`}>
-							<span
-								className="absolute inset-y-0 left-0 rounded-full bg-foreground/70 transition-[width] duration-500"
-								style={{ width: `${Math.round(Math.min(1, Math.max(0, topic.focus.done)) * 100)}%` }}
-							/>
-						</span>
+						{hover ? (
+							<span className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 text-[11px] tabular-nums text-muted-foreground" data-testid="exam-notch-topic-detail">
+								<span>worked through</span>
+								<TopicBar value={topic.focus.progress} className="bg-foreground/70" label={`${pct(topic.focus.progress)} worked through`} />
+								<span className="text-right text-foreground">{pct(topic.focus.progress)}</span>
+								<span>understood</span>
+								{topic.focus.understanding === null ? (
+									<span className="col-span-2 text-muted-foreground/70">not enough answers yet</span>
+								) : (
+									<>
+										<TopicBar
+											value={topic.focus.understanding}
+											className={topic.focus.understanding < UNDERSTANDING_TARGET ? "bg-amber-500" : "bg-green-500"}
+											label={`${pct(topic.focus.understanding)} understood`}
+										/>
+										<span className={cn("text-right", topic.focus.understanding < UNDERSTANDING_TARGET ? "text-amber-500" : "text-foreground")}>
+											{pct(topic.focus.understanding)}
+										</span>
+									</>
+								)}
+							</span>
+						) : (
+							<TopicBar value={topic.focus.done} className="bg-foreground/70" label={`This topic: ${pct(topic.focus.done)} done`} />
+						)}
 					</span>
 				)}
 			</button>

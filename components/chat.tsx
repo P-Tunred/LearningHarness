@@ -1295,6 +1295,7 @@ export function Chat({
 					// never fire. Rename mode is interactive mode (owner ask) —
 					// TopBar's one escape hatch.
 					drag={!renaming}
+					clearNotch
 					onMouseDown={(e) => {
 						// Escape hitbox: any mousedown outside the input itself blurs
 						// it, running the existing onBlur commit path. The input is

@@ -88,8 +88,11 @@ nicht jede Aussage.
   nächstgelegene Klausur · Stand · heute noch offen + dünner Balken.
   Bist du in einem Themen-Chat eines Auftrags, zeigt sie stattdessen
   dessen Klausur und darunter das Thema mit eigenem Balken (Done =
-  durchgearbeitet × verstanden, wie der Gesamtbalken); in anderen Chats
-  nichts davon. Ändert eine Antwort dort die Zahlen, steigen links neben
+  durchgearbeitet × verstanden, wie der Gesamtbalken; mit der Maus
+  darüber stattdessen zwei Balken: worked through und understood); in
+  anderen Chats nichts davon. In Chats beginnt die Titelzeile unter der
+  Notch (`TopBar clearNotch`, Höhe aus `--lh-notch-h`), damit sie den
+  Titel nicht verdeckt. Ändert eine Antwort dort die Zahlen, steigen links neben
   dem Chat (auf Höhe des Antwortfelds, Stelle leicht zufällig) kleine
   Zahlen auf wie XP im Spiel: „+4 % understood“, „+10 % worked through“ –
   grün bei Gewinn, rot bei Verlust, nach ~3 s weg

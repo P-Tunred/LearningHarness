@@ -43,17 +43,23 @@ import { SidebarToggle } from "@/components/sidebar";
 
 export function TopBar({
 	drag = true,
+	clearNotch = false,
 	onMouseDown,
 	children,
 }: {
 	drag?: boolean;
+	/** Fork addition (Paul, 2026-11-09): start the bar's row below the exam
+	 *  notch (components/exam-notch.tsx publishes its resting height as
+	 *  --lh-notch-h), so the notch never covers the chat title. 0 without
+	 *  a notch. */
+	clearNotch?: boolean;
 	onMouseDown?: React.MouseEventHandler<HTMLElement>;
 	children?: ReactNode;
 }) {
 	return (
 		<header
 			onMouseDown={onMouseDown}
-			className={`${drag ? "lh-drag " : ""}lh-wco-gutter flex h-15 select-none items-center gap-3 border-b border-border px-3`}
+			className={`${drag ? "lh-drag " : ""}lh-wco-gutter flex ${clearNotch ? "h-[calc(3.75rem+var(--lh-notch-h,0px))] shrink-0 pt-[var(--lh-notch-h,0px)]" : "h-15"} select-none items-center gap-3 border-b border-border px-3`}
 		>
 			<SidebarToggle />
 			{children}
