@@ -225,6 +225,8 @@ export function StudyTimer() {
 	const subjectLabel = view.subject ?? "No subject";
 
 	return (
+		<>
+		<StudyAura on={view.running} />
 		<div
 			ref={rootRef}
 			data-testid="study-timer"
@@ -346,6 +348,28 @@ export function StudyTimer() {
 				</p>
 			)}
 		</div>
+		</>
+	);
+}
+
+/**
+ * Aura (Paul, 2026-11-09): while the clock runs, a very faint green glow
+ * along the inside of the whole window edge, so a glance tells whether
+ * time is being counted; paused or stopped, no color at all. Purely
+ * visual — clicks pass through.
+ */
+function StudyAura({ on }: { on: boolean }) {
+	return (
+		<div
+			aria-hidden="true"
+			data-testid="study-aura"
+			data-on={on ? "true" : "false"}
+			className={cn(
+				"pointer-events-none fixed inset-0 z-40 transition-opacity duration-700 ease-out",
+				"shadow-[inset_0_0_14px_2px_rgb(34_197_94/0.28),inset_0_0_0_1px_rgb(34_197_94/0.22)]",
+				on ? "opacity-100" : "opacity-0",
+			)}
+		/>
 	);
 }
 
