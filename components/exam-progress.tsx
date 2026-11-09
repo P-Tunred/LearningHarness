@@ -76,6 +76,11 @@ export function useExamProgress(): { exams: Active[]; loaded: boolean } {
 			if (timer.current) clearTimeout(timer.current);
 		};
 	}, [load]);
+	// An answer is saved the instant it is sent (the write-ahead persist,
+	// right as the turn starts), so the numbers — and the XP float — can
+	// move ~1.5 s after answering instead of after the whole reply (Paul,
+	// 2026-11-09). turn-settled still catches what the reply changes.
+	useServerEvent("turn-started", schedule);
 	useServerEvent("turn-settled", schedule);
 	useServerEvent("chats-changed", schedule);
 	useServerResync(schedule);

@@ -95,7 +95,9 @@ nicht jede Aussage.
   Titel nicht verdeckt. Ändert eine Antwort dort die Zahlen, steigen links neben
   dem Chat (auf Höhe des Antwortfelds, Stelle leicht zufällig) kleine
   Zahlen auf wie XP im Spiel: „+4 % understood“, „+10 % worked through“,
-  unter 1 % mit Komma („+0.4 %“) – grün bei Gewinn, rot bei Verlust,
+  unter 1 % mit Komma („+0.4 %“), ~1,5 s nach dem Antworten (die Antwort
+  ist sofort gespeichert; Neuladen bei `turn-started`, nicht erst wenn der
+  Tutor fertig ist) – grün bei Gewinn, rot bei Verlust,
   nach ~5 s weg
   (`components/xp-float.tsx`; „understood“ erst ab 3 bewerteten
   Antworten). Ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
