@@ -41,8 +41,10 @@ export function revisitsProblem(ctx: Pick<PlanToolContext, "chatId" | "chatStore
 	// an id (it caused needless "Retrying…" rounds). The ledger trims too.
 	const revisits = raw?.trim();
 	if (!revisits) return null;
-	const open = questionLedger(ctx.chatStore.getChat(ctx.chatId)?.messages ?? []).open;
-	if (open.some((q) => q.id === revisits)) return null;
+	const { open, aliases } = questionLedger(ctx.chatStore.getChat(ctx.chatId)?.messages ?? []);
+	// A re-ask's own id stands for the original (the tutor sees the newest call).
+	const id = aliases.get(revisits) ?? revisits;
+	if (open.some((q) => q.id === id)) return null;
 	return (
 		`revisits "${revisits}" is not an open question of this session. ` +
 		(open.length > 0

@@ -49,6 +49,9 @@ export interface QuestionLedger {
 	open: OpenQuestion[];
 	/** Plan nodes with at least one answered question (any answer). */
 	answeredNodes: Set<string>;
+	/** A re-ask's own call id → the original question's id. The tutor may
+	 *  name either when it re-asks again (it sees the newest call). */
+	aliases: ReadonlyMap<string, string>;
 }
 
 interface Call {
@@ -115,6 +118,8 @@ function isCheck(call: Call): boolean {
 export function questionLedger(messages: readonly unknown[]): QuestionLedger {
 	const calls = questionCalls(messages);
 	const items = new Map<string, Item>();
+	const aliases = new Map<string, string>();
+	const resolve = (id: string) => aliases.get(id) ?? id;
 	const answeredNodes = new Set<string>();
 	let questions = 0;
 	for (const m of messages) {
@@ -140,10 +145,11 @@ export function questionLedger(messages: readonly unknown[]): QuestionLedger {
 		const result = { correct, reason, ...(confidence !== undefined ? { confidence } : {}), ...(answeredAt ? { answeredAt } : {}) };
 		// A re-ask of an open check REPLACES its result: the old answer no
 		// longer counts, and a right and sure one closes it.
-		const target = call.revisits ? items.get(call.revisits) : undefined;
+		const target = call.revisits ? items.get(resolve(call.revisits)) : undefined;
 		if (target && target.reason !== null) {
 			const { confidence: _c, answeredAt: _a, ...kept } = target;
 			items.set(target.id, { ...kept, ...result, answeredAt: answeredAt ?? target.answeredAt });
+			aliases.set(id, target.id);
 			continue;
 		}
 		items.set(id, { id, question: d.questionText.trim(), ...(call.nodeId ? { nodeId: call.nodeId } : {}), ...result });
@@ -165,5 +171,6 @@ export function questionLedger(messages: readonly unknown[]): QuestionLedger {
 		correct: all.filter((i) => i.correct === true).length,
 		open,
 		answeredNodes,
+		aliases,
 	};
 }

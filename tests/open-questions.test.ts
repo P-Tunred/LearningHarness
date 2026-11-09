@@ -83,6 +83,16 @@ describe("questionLedger", () => {
 		assert.equal(l.questions, 5, "every answered question still counts as activity");
 	});
 
+	it("a re-ask may name the newest re-ask's id: it stands for the original", () => {
+		const msgs = [...qa("a", { correct: false }), ...qa("r1", { correct: false }, { revisits: "a" })];
+		const l = questionLedger([...msgs, ...qa("r2", { correct: true, confidence: 90 }, { revisits: "r1" })]);
+		assert.deepEqual(l.open, [], "r1 resolves to a, which the sure right answer closes");
+		assert.equal(l.graded, 1);
+		assert.equal(l.correct, 1);
+		const ctx = { chatId: "c1", chatStore: { getChat: () => ({ messages: msgs }) } } as never;
+		assert.equal(revisitsProblem(ctx, "r1"), null, "the quiz check accepts the newer id too");
+	});
+
 	it("a re-ask replaces the original for understanding too", () => {
 		const fixed = questionLedger([...qa("a", { correct: false }), ...qa("b", { correct: true }), ...qa("r", { correct: true, confidence: 80 }, { revisits: "a" })]);
 		assert.equal(fixed.graded, 2, "a and its re-ask count once");

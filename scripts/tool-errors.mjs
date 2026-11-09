@@ -38,11 +38,31 @@ for (const { f } of files) {
 	} catch {
 		continue;
 	}
-	const errors = (chat.messages ?? []).filter((m) => m && m.role === "toolResult" && m.isError === true);
+	const messages = chat.messages ?? [];
+	const calls = new Map();
+	for (const m of messages) {
+		if (m && m.role === "assistant" && Array.isArray(m.content)) {
+			for (const b of m.content) if (b && b.type === "toolCall") calls.set(b.id, b);
+		}
+	}
+	const answered = new Set(messages.filter((m) => m && m.role === "toolResult" && m.details && typeof m.details.questionText === "string").map((m) => m.toolCallId));
+	// What a rejected `revisits` id points at: tells "re-asked a guess
+	// question" apart from "invented an id".
+	const describe = (id) => {
+		const c = calls.get(id);
+		if (!c) return "an id that does not exist in this chat";
+		const a = c.arguments ?? {};
+		const kind = `${c.name}${a.type ? ` (${String(a.type).replace(/"/g, "")})` : ""}`;
+		const re = a.revisits ? `, itself a re-ask of ${a.revisits}` : "";
+		return `a ${kind} question${re}${answered.has(id) ? "" : ", not answered"}`;
+	};
+	const errors = messages.filter((m) => m && m.role === "toolResult" && m.isError === true);
 	console.log(`\n=== ${chat.title ?? f} — ${errors.length} tool error(s)`);
 	for (const m of errors.slice(-15)) {
 		const when = typeof m.timestamp === "number" ? new Date(m.timestamp).toLocaleString() : "";
 		const text = textOf(m.content).replace(/\s+/g, " ").trim();
 		console.log(`- ${when}  ${m.toolName ?? "?"}: ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`);
+		const rejected = /revisits "([^"]+)" is not an open question/.exec(text)?.[1];
+		if (rejected) console.log(`    → ${rejected} is ${describe(rejected)}`);
 	}
 }
