@@ -34,6 +34,7 @@ import {
 import { examProgress, minutesTodayAndWeek, type ExamProgress } from "../core/exam-progress.ts";
 import { allPieces, settle } from "../core/study-timer.ts";
 import { questionLedger, type OpenQuestion } from "../core/open-questions.ts";
+import type { TopicStatus } from "../core/topic-status.ts";
 import { readTimerState } from "./study-timer.ts";
 import type { ChatRecord } from "../core/contracts/chat.ts";
 import { emit, subscribe } from "../core/events.ts";
@@ -148,6 +149,39 @@ function readManifest(exportDir: string): Manifest {
 		if (raw && raw.version === 1 && raw.files && typeof raw.files === "object") return { version: 1, files: { ...raw.files } };
 	} catch { /* first export or unreadable → start fresh */ }
 	return { version: 1, files: {} };
+}
+
+/** The exam plan topic a chat is, from the plans alone (cheap: no chat
+ *  reads) — decides the tutor's prompt note and topic_status. */
+export function examTopicOf(chatId: string): { exam: string; topic: string } | null {
+	const configured = configuredBrainFolder();
+	const root = configured ? usableFolder(configured) : null;
+	if (!root) return null;
+	for (const e of examOverviews(root)) {
+		const f = e.focuses.find((x) => x.chatId === chatId);
+		if (f) return { exam: e.exam, topic: f.title };
+	}
+	return null;
+}
+
+/** The live numbers of a chat's exam topic, as the overview counts them. */
+export function topicStatusNow(chatId: string): TopicStatus | null {
+	for (const p of examProgressNow()) {
+		if (p.phase !== "study" && p.phase !== "revision") continue;
+		const f = p.focuses.find((x) => x.chatId === chatId);
+		if (f) {
+			return {
+				exam: p.exam,
+				topic: f.title,
+				workedThrough: f.progress,
+				understood: f.understanding,
+				done: f.done,
+				openQuestions: f.openQuestions,
+				finished: f.finished,
+			};
+		}
+	}
+	return null;
 }
 
 /** The open questions of one chat (the exam overview's list, fetched on

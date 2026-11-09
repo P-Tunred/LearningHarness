@@ -53,6 +53,10 @@ import { emit } from "../core/events.ts";
 import { settledTurnResponse } from "./turn-runs.ts";
 import { asAgentMessages } from "../core/native-messages.ts";
 import { brainPromptNote } from "./brain-folder.ts";
+// brain.ts imports this module too; only functions cross the cycle, all
+// called at request time — never during module evaluation.
+import { examTopicOf, topicStatusNow } from "./brain.ts";
+import { examTopicPromptNote } from "../core/topic-status.ts";
 import {
 	ChatInputError,
 	inputAppends,
@@ -447,6 +451,14 @@ export async function handleChatInput(
 		},
 		restoreAutomatic: (automaticIds, retainedIds) => restoreUncommittedAutomatic(chatId, constructed, automaticIds, retainedIds),
 	});
+	// Fork addition (Paul, 2026-11-09): is this chat a topic of an exam plan?
+	// A failure to read the plans only drops the note, never the turn.
+	let examTopic: { exam: string; topic: string } | null = null;
+	try {
+		examTopic = examTopicOf(chatId);
+	} catch (err) {
+		console.warn("[exam-topic] lookup failed:", err);
+	}
 	const agentOpts: AgentBuildOptions = {
 		engine,
 		callPurpose,
@@ -461,8 +473,12 @@ export async function handleChatInput(
 		// point as the tool delta — the agent layer composes the system
 		// prompt fresh per turn, swapping in any enabled override segments.
 		promptSwitches: effective.agent.prompts,
-		// Fork addition: where the Second Brain is (read-only lookups).
-		promptAppendix: brainPromptNote() ?? undefined,
+		// Fork addition: where the Second Brain is (read-only lookups), and
+		// in an exam topic chat the topic + its finish rule (stable text;
+		// the live numbers come from topic_status).
+		promptAppendix: [brainPromptNote(), examTopic ? examTopicPromptNote(examTopic.exam, examTopic.topic) : null]
+			.filter((s): s is string => !!s)
+			.join("\n\n") || undefined,
 	};
 	// PRACTICE BRANCH (owner design, 2026-10-04): a kind:"practice"
 	// session builds the practitioner from turn 1 — no prober→teacher
@@ -505,6 +521,8 @@ export async function handleChatInput(
 						// The registry drop's signal (2026-09-20): no live engine
 						// = no research tool in the teacher's registry.
 						searchAvailable,
+						// Fork addition: live exam topic numbers (topic_status).
+						...(examTopic ? { topicStatus: () => topicStatusNow(chatId) } : {}),
 					},
 					agentOpts,
 				)

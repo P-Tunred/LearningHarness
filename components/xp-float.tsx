@@ -21,8 +21,17 @@ export interface XpTopic {
 
 export interface XpGain {
 	label: "understood" | "worked through";
-	/** Percentage points, rounded; never 0. */
+	/** Percentage points to one decimal; never 0. */
 	points: number;
+}
+
+/** Percentage points to one decimal (changes below 1 % show too). */
+const points = (from: number, to: number) => Math.round((to - from) * 1000) / 10;
+
+/** "+4 %", "+0.4 %", "−3 %": whole points from 1 up, one decimal below. Exported for tests. */
+export function xpText(p: number): string {
+	const abs = Math.abs(p);
+	return `${p > 0 ? "+" : "−"}${abs >= 1 ? Math.round(abs) : abs.toFixed(1)} %`;
 }
 
 /** What changed between two readings of the same topic. Exported for tests. */
@@ -30,11 +39,11 @@ export function xpGains(before: XpTopic, after: XpTopic): XpGain[] {
 	if (before.chatId !== after.chatId) return [];
 	const out: XpGain[] = [];
 	if (before.understanding !== null && after.understanding !== null) {
-		const points = Math.round((after.understanding - before.understanding) * 100);
-		if (points !== 0) out.push({ label: "understood", points });
+		const p = points(before.understanding, after.understanding);
+		if (p !== 0) out.push({ label: "understood", points: p });
 	}
-	const points = Math.round((after.progress - before.progress) * 100);
-	if (points !== 0) out.push({ label: "worked through", points });
+	const p = points(before.progress, after.progress);
+	if (p !== 0) out.push({ label: "worked through", points: p });
 	return out;
 }
 
@@ -46,7 +55,7 @@ interface Floater extends XpGain {
 	delay: number;
 }
 
-const LIFE_MS = 2600;
+const LIFE_MS = 5000;
 const STAGGER_MS = 280;
 
 export function XpFloat({ topic }: { topic: XpTopic | null }) {
@@ -107,10 +116,7 @@ export function XpFloat({ topic }: { topic: XpTopic | null }) {
 					)}
 					style={{ right: f.right, bottom: f.bottom, animationDelay: `${f.delay}ms` }}
 				>
-					<span className="text-sm font-semibold tabular-nums">
-						{f.points > 0 ? "+" : "−"}
-						{Math.abs(f.points)} %
-					</span>
+					<span className="text-sm font-semibold tabular-nums">{xpText(f.points)}</span>
 					<span className="mt-0.5 text-[10px] uppercase tracking-wider opacity-80">{f.label}</span>
 				</span>
 			))}

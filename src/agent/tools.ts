@@ -19,6 +19,8 @@ import { jobTools, type DemoInput, type PdfInput, type ResearchInput, type Visua
 import { planTools, type PlanToolContext } from "./tools/plan.ts";
 import { probeDoneTool, type ProbeDoneContext } from "./tools/probe.ts";
 import { openQuestionsTool, revisitsProblem } from "./tools/open-questions.ts";
+import { topicStatusTool } from "./tools/topic-status.ts";
+import type { TopicStatus } from "../core/topic-status.ts";
 import { proberGraphTools } from "./tools/graph.ts";
 import { readTool } from "./tools/read.ts";
 import { lsTool } from "./tools/ls.ts";
@@ -403,6 +405,10 @@ export interface TeacherToolContext extends PlanToolContext {
 	spawn: (job: JobRecord, input: ResearchInput | DemoInput | VisualInput | PdfInput) => void;
 	/** Retained search-status seam; research dispatch is available keylessly. */
 	searchAvailable?: () => boolean;
+	/** Fork addition (Paul, 2026-11-09): the live status of the exam topic
+	 *  this chat belongs to — present only in exam topic chats, and only
+	 *  then is topic_status registered. */
+	topicStatus?: () => TopicStatus | null;
 }
 
 /**
@@ -465,6 +471,7 @@ export function createTeacherTools(
 			// The re-ask path (quiz.revisits) exists in multiple-choice
 			// mechanics only — free recall is not graded, so it cannot close one.
 			...(mechanics === "choice" ? { open_questions: openQuestionsTool(ctx) } : {}),
+			...(ctx.topicStatus ? { topic_status: topicStatusTool(ctx.topicStatus) } : {}),
 			...jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable }),
 		},
 		withoutMechanics(enabled),

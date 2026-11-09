@@ -94,8 +94,9 @@ nicht jede Aussage.
   Notch (`TopBar clearNotch`, Höhe aus `--lh-notch-h`), damit sie den
   Titel nicht verdeckt. Ändert eine Antwort dort die Zahlen, steigen links neben
   dem Chat (auf Höhe des Antwortfelds, Stelle leicht zufällig) kleine
-  Zahlen auf wie XP im Spiel: „+4 % understood“, „+10 % worked through“ –
-  grün bei Gewinn, rot bei Verlust, nach ~3 s weg
+  Zahlen auf wie XP im Spiel: „+4 % understood“, „+10 % worked through“,
+  unter 1 % mit Komma („+0.4 %“) – grün bei Gewinn, rot bei Verlust,
+  nach ~5 s weg
   (`components/xp-float.tsx`; „understood“ erst ab 3 bewerteten
   Antworten). Ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
   pro Gerät gemerkt). Aufgeklappt eine Karte je Klausur (englisch):
@@ -123,12 +124,23 @@ nicht jede Aussage.
   (auch „weiß nicht“), ganz. Sonst bliebe der letzte Schritt ewig „aktuell“
   und 100 % unerreichbar. Ein Thema ist **fertig** bei Durchgearbeitet ×
   Verstanden ≥ 90 % und 0 offenen Fragen (streng, so gewollt).
-- **Offene Fragen** (`src/core/open-questions.ts`): jede bewertete Frage,
+- **Was zählt** (`src/core/open-questions.ts`): für „Verstanden“ und offene
+  Fragen nur **Check-Fragen** (nach dem Erklären eines Schritts).
+  Vorhersagen („predict“, geraten *bevor* erklärt wird) und die
+  Einstiegsfragen (probe) zählen nicht.
+- **Offene Fragen**: jede Check-Frage,
   die du mit „weiß nicht“, falsch oder richtig aber unsicher (Sicherheit
   < 50) beantwortet hast. Sie bleibt offen, bis der Tutor sie noch einmal
   stellt (gleich oder umformuliert, Quiz mit `revisits: <id>`) und du sie
-  **richtig und sicher** beantwortest; eine falsche/unsichere Wiederholung
-  lässt sie offen, ohne eine zweite zu zählen. Der Tutor hat dafür das
+  **richtig und sicher** beantwortest. Die Wiederholung **ersetzt** die
+  alte Antwort, auch für „Verstanden“ (eine Frage zählt einmal, mit ihrer
+  letzten Antwort); falsch/unsicher lässt sie offen.
+- **Tutor kennt die Regel**: In Themen-Chats eines Auftrags steht im
+  Prompt (fester Text, Cache bleibt warm) Thema und Fertig-Regel; das
+  Werkzeug `topic_status` liefert die aktuellen Zahlen und was fehlt. Der
+  Tutor darf ein Thema erst „fertig“ nennen, wenn es das auch für
+  LearnHarness ist (`src/core/topic-status.ts`,
+  `src/agent/tools/topic-status.ts`). Der Tutor hat dafür das
   Werkzeug `open_questions` (offene Fragen dieses Chats mit id, nur bei
   Multiple Choice – freie Antworten werden nicht bewertet). In der
   Übersicht öffnet ein Klick auf „N open questions“ die Liste mit Grund

@@ -317,7 +317,8 @@ export interface ExamInput {
 
 /** Below this many graded answers "understanding" is not yet measurable. */
 const MIN_GRADED_FOR_UNDERSTANDING = 3;
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Shares keep four decimals: the XP float shows changes below 1 %. */
+const round4 = (n: number) => Math.round(n * 10_000) / 10_000;
 
 export interface ExamSummary {
 	exam: string;
@@ -483,9 +484,9 @@ export function summarizeExams(
 				effortHours: f.effortHours ?? null,
 				started,
 				planNodes,
-				progress: round2(progress),
-				understanding: understanding === null ? null : round2(understanding),
-				done: round2(progress * (understanding ?? 1)),
+				progress: round4(progress),
+				understanding: understanding === null ? null : round4(understanding),
+				done: round4(progress * (understanding ?? 1)),
 				learningMinutes: d ? minutes(d.learningMs) : 0,
 				timerMinutes: minutes(timerMs),
 				openQuestions: d ? d.unsure.length : 0,

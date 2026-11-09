@@ -54,8 +54,11 @@ describe("digestSession (golden teach session)", () => {
 		assert.equal(d.kind, "teach");
 		assert.ok(d.questions > 0, "the fixture answers quiz/probe/recall questions");
 		assert.ok(d.graded > 0 && d.correct <= d.graded);
-		assert.ok(d.unsure.some((u) => u.reason === "dontKnow"), "the fixture contains a don't-know answer");
-		assert.ok(d.unsure.some((u) => u.reason === "incorrect"), "and a wrong one");
+		// Only checks count (src/core/open-questions.ts, Paul 2026-11-09): the
+		// fixture's don't-know answers a PREDICTION, so it stays out; its
+		// wrong check is in.
+		assert.ok(!d.unsure.some((u) => u.reason === "dontKnow"), "the don't-know was a prediction");
+		assert.ok(d.unsure.some((u) => u.reason === "incorrect"), "the wrong check is open");
 		assert.ok(d.learningMs > 0);
 	});
 
