@@ -22,8 +22,14 @@ SUBJECTS_REL="LearnHarness/Faecher"
 
 brain_folder() {
 	if [ -n "${LH_BRAIN:-}" ]; then echo "$LH_BRAIN"; return; fi
-	local f
-	for f in "$HOME/Library/Application Support/LearnHarness-dev/data/settings.json" \
+	local f repo
+	repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+	# The Dock icon runs `npm run desktop:dev`: its Next server keeps data in
+	# the repo's data/ folder. LH_DATA_DIR and the packaged app's profile
+	# are the other places the setting can live.
+	for f in ${LH_DATA_DIR:+"$LH_DATA_DIR/settings.json"} \
+		"$repo/data/settings.json" \
+		"$HOME/Library/Application Support/LearnHarness-dev/data/settings.json" \
 		"$HOME/Library/Application Support/LearnHarness/data/settings.json"; do
 		[ -f "$f" ] || continue
 		local folder
