@@ -154,6 +154,12 @@ function resolveEngine(role: ModelRole): PiEngine | undefined {
 	return spec ? piEngineForSpec(spec, true, undefined, retentionForSlot(ROLE_SLOT[role])) : undefined;
 }
 
+/** The engine a background job of this role would use (fork addition:
+ *  the Fach-Überprüfung runs on the teacher's — the strong — engine). */
+export function engineForRole(role: ModelRole): PiEngine | undefined {
+	return resolveEngine(role);
+}
+
 /** Slot policy is independent of model overrides. Read fresh per operation,
  * including parked conversations, background loops and compaction. */
 function retentionForSlot(slot: ModelSlotName) {

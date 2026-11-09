@@ -67,7 +67,7 @@ export class ExamPlanError extends Error {}
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
-function frontMatter(text: string): { meta: Record<string, string>; rest: string } {
+export function frontMatter(text: string): { meta: Record<string, string>; rest: string } {
 	const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
 	if (!m) return { meta: {}, rest: text };
 	const meta: Record<string, string> = {};
@@ -79,14 +79,14 @@ function frontMatter(text: string): { meta: Record<string, string>; rest: string
 }
 
 /** A positive number with optional "h" and a German decimal comma; null otherwise. */
-function hours(value: string | undefined): number | null {
+export function hours(value: string | undefined): number | null {
 	const m = /^\s*(\d+(?:[.,]\d+)?)\s*(?:h|std|stunden|hours?)?\s*$/i.exec(value ?? "");
 	if (!m) return null;
 	const n = Number(m[1]!.replace(",", "."));
 	return n > 0 && n <= 500 ? n : null;
 }
 
-function validDate(value: string | undefined): string | null {
+export function validDate(value: string | undefined): string | null {
 	if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
 	const d = new Date(`${value}T12:00:00Z`);
 	return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value ? null : value;

@@ -18,6 +18,27 @@ interface BrainStatusView {
 	conflicts?: string[];
 	import?: { total: number; done: number; failed: number; current?: string; finishedAt?: string };
 	exams?: { plans: number; created: number; errors: string[] };
+	subjects?: {
+		running: string | null;
+		outcomes: Array<{ subject: string; status: "reviewed" | "unchanged" | "empty" | "failed"; topics?: number; newMaterials?: string[]; error?: string }>;
+		finishedAt?: string;
+	};
+}
+
+/** One line per subject for the Fach-Überprüfung row. Exported for tests. */
+export function subjectLine(s: NonNullable<BrainStatusView["subjects"]>): string {
+	if (s.running) return `Überprüfe ${s.running} …`;
+	if (s.outcomes.length === 0) return "Noch kein Fach angelegt.";
+	return s.outcomes
+		.map((o) => {
+			switch (o.status) {
+				case "reviewed": return `${o.subject}: neu geplant (${o.topics ?? 0} Themen${o.newMaterials?.length ? `, ${o.newMaterials.length} neue Dateien` : ""})`;
+				case "unchanged": return `${o.subject}: aktuell (${o.topics ?? 0} Themen)`;
+				case "empty": return `${o.subject}: noch keine Folien`;
+				case "failed": return `${o.subject}: Fehler – ${o.error ?? "unbekannt"} (nächster Start versucht es erneut)`;
+			}
+		})
+		.join(" · ");
 }
 
 const POLL_MS = 2_000;
@@ -114,6 +135,15 @@ export function BrainSection({
 						{`${status.exams.plans} ${status.exams.plans === 1 ? "Auftrag" : "Aufträge"}, ${status.exams.created} neue Sessions`}
 						{status.exams.errors.length > 0 && ` · Fehler: ${status.exams.errors.join("; ")}`}
 					</span>
+				</SettingsRow>
+			)}
+			{status?.subjects && (
+				<SettingsRow
+					label="Fächer"
+					hint="LearnHarness/Faecher/<Fach>/ mit Folien/ und Klausuren/: bei neuen Dateien prüft LearnHarness das ganze Fach neu und schreibt plan.md und aenderungen.md."
+					testid="row-brain-subjects"
+				>
+					<span className="max-w-96 text-right font-ui text-xs text-muted-foreground">{subjectLine(status.subjects)}</span>
 				</SettingsRow>
 			)}
 			{status?.conflicts && status.conflicts.length > 0 && (

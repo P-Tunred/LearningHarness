@@ -591,6 +591,7 @@ function overviewMarkdown(stats: BrainStats): string {
 		"- **Offene Fragen** zählt Antworten mit „Weiß nicht“, falschen oder unsicheren Antworten — nur die Anzahl.",
 		"- Dokumente zum Lernen kommen über den Ordner `LearnHarness/Eingang/` im Brain in LearnHarness hinein.",
 		"- Klausurpläne (z. B. von Claude) kommen nach `LearnHarness/Auftraege/`; jeder Schwerpunkt wird eine Session im Ordner der Klausur.",
+		"- Folien und Altklausuren eines Fachs kommen nach `LearnHarness/Faecher/<Fach>/Folien/` und `…/Klausuren/`; bei neuen Dateien prüft LearnHarness das ganze Fach neu und schreibt dort `plan.md` und `aenderungen.md`.",
 		"",
 		"## Quellen",
 		"",

@@ -120,6 +120,38 @@ nicht jede Aussage.
   `tests/exam-plan.test.ts`, `tests/exam-plans-sync.test.ts`,
   `tests/exam-progress.test.ts`.
 
+### 3b. Fach-Überprüfung (Folien jede Woche, das Fach als Ganzes)
+
+Pro Fach ein Ordner im Brain: `LearnHarness/Faecher/<Fach>/` mit
+`Folien/` (jede Woche die neuen Folien, `.pdf`/`.md`/`.txt`), `Klausuren/`
+(Altklausuren) und optional `fach.md` (Frontmatter `exam`/`klausur`,
+`date`/`datum`, `hours_per_week`/`stunden_pro_woche`, `language`/`sprache`;
+der Text darunter geht als Notiz mit).
+
+- Liegen **neue oder geänderte Dateien** im Fach-Ordner, läuft beim
+  App-Start **einmal** eine Überprüfung im Hintergrund (Strong-Modell, also
+  bei dir über Hermes). PDFs werden dafür einmal in Text umgewandelt und im
+  Datenordner zwischengespeichert (`faecher-cache/`).
+- Sie liest **alles**: alle Folien, die Altklausuren, den bisherigen
+  `plan.md` (deine eigenen Änderungen daran inklusive) und deinen Lernstand im
+  Fach (Sessions im Ordner „<Fach>“ oder „<Fach> Klausur“: Lernzeit, Antworten,
+  was du nicht wusstest/falsch/unsicher hattest).
+- Sie prüft vier Dinge: **Themen über Vorlesungen hinweg** (inkl.
+  Voraussetzungen und Widersprüchen zwischen Folien), **Klausurrelevanz**
+  (was die Altklausuren wirklich fragen), **dein echtes Verständnis** und
+  **den alten Plan selbst**: Jedes alte Thema muss im neuen Plan wieder
+  auftauchen (weiter aktiv, geändert, zusammengelegt/umbenannt oder
+  „überholt“ mit Grund) — sonst wird der Lauf abgelehnt und beim nächsten
+  Start wiederholt; nichts verschwindet stillschweigend.
+- Ergebnis im Fach-Ordner: **`plan.md`** (Themen nach Wichtigkeit: Gewicht,
+  Aufwand, dein Stand, Voraussetzungen, Quellen, Klausur-Bezug, Ziel;
+  Widersprüche, offene Fragen, überholte Themen) und **`aenderungen.md`**
+  (was jeder Lauf geändert hat und warum, neuester oben).
+- Stand: Settings → Second Brain → „Fächer“. Buchhaltung: `faecher.json` im
+  Datenordner. Code: `src/core/subject-review.ts`, `src/server/subject-review.ts`.
+- Etappe 2 (noch offen): aus `plan.md` automatisch Sessions pro Thema,
+  Anzeige in Notch und Übersicht.
+
 ### 4. Startsymbol für den Mac
 
 `integrations/mac/install-launcher.sh root@<server>` legt einmalig das Symbol

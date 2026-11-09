@@ -44,6 +44,7 @@ import { convertPdf } from "../agent/subagents/pdf-ops.ts";
 import { joinPages } from "../agent/subagents/pdf-markdown.ts";
 import { configuredBrainFolder, exportDirFor, usableFolder } from "./brain-folder.ts";
 import { examOverviews, syncExamPlans } from "./exam-plans.ts";
+import { reviewSubjects, type SubjectReviewOutcome } from "./subject-review.ts";
 import { extraction } from "./chat-handler.ts";
 import { sourceDirectory } from "./source-organization.ts";
 import { stores } from "./stores.ts";
@@ -67,6 +68,8 @@ export interface BrainStatus {
 	import?: { total: number; done: number; failed: number; current?: string; finishedAt?: string };
 	/** Klausur-Aufträge read at the last start. */
 	exams?: { plans: number; created: number; errors: string[] };
+	/** Fach-Überprüfung: the subject being reviewed now, and the last outcomes. */
+	subjects?: { running: string | null; outcomes: SubjectReviewOutcome[]; finishedAt?: string };
 }
 
 interface BrainGlobal {
@@ -421,6 +424,26 @@ function scheduleExport(): void {
 
 /** Import the inbox, then export. `force` re-runs it after the
  *  folder setting changed; otherwise it runs once per app start. */
+/** One Fach-Überprüfung pass at a time (it is single-flight on its own). */
+function startSubjectReviews(root: string): void {
+	const g = globalThis as { __lhSubjectReview?: Promise<void> | null };
+	if (g.__lhSubjectReview) return;
+	setStatus({ subjects: { running: null, outcomes: runtime().status.subjects?.outcomes ?? [] } });
+	g.__lhSubjectReview = reviewSubjects(root, {
+		onSubject: (subject) => setStatus({ subjects: { running: subject, outcomes: runtime().status.subjects?.outcomes ?? [] } }),
+	})
+		.then((outcomes) => {
+			setStatus({ subjects: { running: null, outcomes, finishedAt: new Date().toISOString() } });
+			// New plans are worth a fresh overview in the brain.
+			if (outcomes.some((o) => o.status === "reviewed")) scheduleExport();
+		})
+		.catch((err) => {
+			console.error("[faecher] review pass failed:", err);
+			setStatus({ subjects: { running: null, outcomes: [{ subject: "—", status: "failed", error: err instanceof Error ? err.message : String(err) }] } });
+		})
+		.finally(() => { g.__lhSubjectReview = null; });
+}
+
 export function startBrainSync(options: { force?: boolean } = {}): Promise<void> {
 	const rt = runtime();
 	if (!rt.unsubscribe) {
@@ -442,6 +465,9 @@ export function startBrainSync(options: { force?: boolean } = {}): Promise<void>
 			await importInbox(root);
 			runExamPlans(root);
 			runExport(root);
+			// Fach-Überprüfung: model runs take minutes — in the background,
+			// outside the exclusive queue, so exports are never held up.
+			startSubjectReviews(root);
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);
 			setStatus({ phase: "error", error });
