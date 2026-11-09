@@ -6,15 +6,18 @@
  * stands · what is left today, over a thin progress bar. A click folds it
  * open: one card per exam (line bar, done/understood, today, up next with
  * links into the sessions) and "Details" to the overview page (/exams).
+ * In a topic chat of an exam plan the closed notch speaks for THAT exam and
+ * adds the topic's own Done bar under the total.
  * Escape or a click outside folds it back; the open/closed choice is
  * remembered on this device. Hidden while no exam plan runs.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronDownIcon, MaximizeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Active, ExamBlock, hm, STANDING, standingLabel, useExamProgress } from "@/components/exam-progress";
+import { type Active, ExamBlock, hm, pct, STANDING, standingLabel, useExamProgress } from "@/components/exam-progress";
 
 const OPEN_KEY = "lh.examNotch.open";
 
@@ -43,6 +46,23 @@ export function nearestExam<T extends Pick<Active, "daysToExam">>(exams: readonl
 	return [...exams].sort((a, b) => a.daysToExam - b.daysToExam)[0];
 }
 
+/** The exam plan topic a chat belongs to, with its exam (Paul, 2026-11-09:
+ *  in a topic chat the notch speaks for that chat's exam and shows the
+ *  topic under the total). Exported for tests. */
+export function topicOfChat<T extends { focuses: ReadonlyArray<{ chatId?: string }> }>(
+	exams: readonly T[],
+	chatId: string | null,
+): { exam: T; focus: T["focuses"][number] } | undefined {
+	if (!chatId) return undefined;
+	for (const exam of exams) {
+		const focus = exam.focuses.find((f) => f.chatId === chatId);
+		if (focus) return { exam, focus };
+	}
+	return undefined;
+}
+
+const chatIdFrom = (pathname: string | null) => /^\/chat\/([^/]+)$/.exec(pathname ?? "")?.[1] ?? null;
+
 /** "25 min to go" / "done ✓" for the closed notch. Exported for tests. */
 export function todayLine(p: Pick<Active, "leftToday" | "targetToday">): string {
 	if (p.targetToday > 0 && p.leftToday === 0) return "today done ✓";
@@ -51,6 +71,7 @@ export function todayLine(p: Pick<Active, "leftToday" | "targetToday">): string 
 
 export function ExamNotch() {
 	const { exams } = useExamProgress();
+	const pathname = usePathname();
 	const [open, setOpen] = useRememberedOpen();
 	const ref = useRef<HTMLDivElement>(null);
 
@@ -76,7 +97,8 @@ export function ExamNotch() {
 		};
 	}, [open, setOpen]);
 
-	const p = nearestExam(exams);
+	const topic = topicOfChat(exams, chatIdFrom(pathname));
+	const p = topic?.exam ?? nearestExam(exams);
 	if (!p) return null;
 	const s = STANDING[p.standing];
 	const more = exams.length - 1;
@@ -113,6 +135,23 @@ export function ExamNotch() {
 						style={{ width: `${Math.round(Math.min(1, Math.max(0, p.ist)) * 100)}%` }}
 					/>
 				</span>
+				{topic && (
+					// This chat's topic: Done = worked through × understood, the
+					// same measure as the total. `w-0 min-w-full` keeps a long
+					// title from widening the notch.
+					<span className="flex w-0 min-w-full flex-col gap-1 pt-0.5" data-testid="exam-notch-topic">
+						<span className="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
+							<span className="min-w-0 truncate">{topic.focus.title}</span>
+							<span className="ml-auto shrink-0 text-foreground">{pct(topic.focus.done)}</span>
+						</span>
+						<span className="relative block h-1 w-full rounded-full bg-border" role="img" aria-label={`This topic: ${pct(topic.focus.done)} done`}>
+							<span
+								className="absolute inset-y-0 left-0 rounded-full bg-foreground/70 transition-[width] duration-500"
+								style={{ width: `${Math.round(Math.min(1, Math.max(0, topic.focus.done)) * 100)}%` }}
+							/>
+						</span>
+					</span>
+				)}
 			</button>
 
 			{open && (

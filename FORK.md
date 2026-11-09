@@ -85,8 +85,11 @@ nicht jede Aussage.
   beidem, nie die Summe.
 - **Klausur-Fortschritt (Notch oben in der Mitte)**: Solange ein
   Klausur-Auftrag läuft, hängt oben mittig eine Notch: eingeklappt
-  nächstgelegene Klausur · Stand · heute noch offen + dünner Balken;
-  ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
+  nächstgelegene Klausur · Stand · heute noch offen + dünner Balken.
+  Bist du in einem Themen-Chat eines Auftrags, zeigt sie stattdessen
+  dessen Klausur und darunter das Thema mit eigenem Balken (Done =
+  durchgearbeitet × verstanden, wie der Gesamtbalken); in anderen Chats
+  nichts davon. Ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
   pro Gerät gemerkt). Aufgeklappt eine Karte je Klausur (englisch):
   Balken = wie viel vom Plan erledigt ist (Fortschritt × Verstehen, nach
   Aufwand gewichtet), Strich = wo du bei gleichmäßigem Tempo heute früh
