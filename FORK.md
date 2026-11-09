@@ -89,7 +89,12 @@ nicht jede Aussage.
   Bist du in einem Themen-Chat eines Auftrags, zeigt sie stattdessen
   dessen Klausur und darunter das Thema mit eigenem Balken (Done =
   durchgearbeitet × verstanden, wie der Gesamtbalken); in anderen Chats
-  nichts davon. Ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
+  nichts davon. Ändert eine Antwort dort die Zahlen, steigen links neben
+  dem Chat (auf Höhe des Antwortfelds, Stelle leicht zufällig) kleine
+  Zahlen auf wie XP im Spiel: „+4 % understood“, „+10 % worked through“ –
+  grün bei Gewinn, rot bei Verlust, nach ~3 s weg
+  (`components/xp-float.tsx`; „understood“ erst ab 3 bewerteten
+  Antworten). Ein Klick klappt sie auf (Esc / Klick daneben schließt, der Zustand wird
   pro Gerät gemerkt). Aufgeklappt eine Karte je Klausur (englisch):
   Balken = wie viel vom Plan erledigt ist (Fortschritt × Verstehen, nach
   Aufwand gewichtet), Strich = wo du bei gleichmäßigem Tempo heute früh

@@ -589,6 +589,51 @@ body {
 	}
 }
 
+/* XP float (fork addition, Paul 2026-11-09): a progress change after an
+   answer pops in beside the chat, drifts up and fades — the game "+xp"
+   feel. Reduced motion: no drift, just a short fade. */
+@keyframes lh-xp-rise {
+	0% {
+		opacity: 0;
+		transform: translateY(8px) scale(0.92);
+	}
+	12% {
+		opacity: 1;
+		transform: translateY(0) scale(1.06);
+	}
+	22% {
+		transform: translateY(-4px) scale(1);
+	}
+	75% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-44px) scale(1);
+	}
+}
+
+@keyframes lh-xp-fade {
+	0%,
+	100% {
+		opacity: 0;
+	}
+	15%,
+	75% {
+		opacity: 1;
+	}
+}
+
+.lh-xp-rise {
+	animation: lh-xp-rise 2.6s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lh-xp-rise {
+		animation: lh-xp-fade 2.6s linear both;
+	}
+}
+
 /* Source-message arrival: a brief, static theme-colored spotlight. */
 .lh-source-passage {
 	scroll-margin-top: 1rem;

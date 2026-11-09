@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { ChevronDownIcon, MaximizeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Active, ExamBlock, hm, pct, STANDING, standingLabel, useExamProgress } from "@/components/exam-progress";
+import { XpFloat } from "@/components/xp-float";
 
 const OPEN_KEY = "lh.examNotch.open";
 
@@ -104,6 +105,9 @@ export function ExamNotch() {
 	const more = exams.length - 1;
 
 	return (
+		<>
+		{/* Outside the notch: its transform would trap a fixed child. */}
+		<XpFloat topic={topic ? { chatId: topic.focus.chatId!, progress: topic.focus.progress, understanding: topic.focus.understanding } : null} />
 		<div
 			ref={ref}
 			data-testid="exam-notch"
@@ -172,5 +176,6 @@ export function ExamNotch() {
 				</div>
 			)}
 		</div>
+		</>
 	);
 }
