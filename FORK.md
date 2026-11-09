@@ -132,7 +132,10 @@ nicht jede Aussage.
   die du mit „weiß nicht“, falsch oder richtig aber unsicher (Sicherheit
   < 50) beantwortet hast. Sie bleibt offen, bis der Tutor sie noch einmal
   stellt (gleich oder umformuliert, Quiz mit `revisits: <id>`) und du sie
-  **richtig und sicher** beantwortest. Die Wiederholung **ersetzt** die
+  **richtig und sicher** beantwortest (stellt der Tutor eine Frage neu, die
+  nicht offen ist – z. B. eine Rate- oder Einstiegsfrage –, gilt sie
+  einfach als neue Check-Frage, ohne „Retrying…“; Diagnose:
+  `node scripts/tool-errors.mjs`). Die Wiederholung **ersetzt** die
   alte Antwort, auch für „Verstanden“ (eine Frage zählt einmal, mit ihrer
   letzten Antwort); falsch/unsicher lässt sie offen.
 - **Tutor kennt die Regel**: In Themen-Chats eines Auftrags steht im
