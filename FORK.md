@@ -149,6 +149,12 @@ der Text darunter geht als Notiz mit).
   (was jeder Lauf geändert hat und warum, neuester oben).
 - Stand: Settings → Second Brain → „Fächer“. Buchhaltung: `faecher.json` im
   Datenordner. Code: `src/core/subject-review.ts`, `src/server/subject-review.ts`.
+- **Woher die Texte kommen:** Hermes (Server) liest Folien und Klausuren —
+  auch PowerPoint und gescannte Seiten — und legt vollständigen Text als
+  Markdown in `Folien/` bzw. `Klausuren/`. Die Originale kommen nach
+  `<Fach>/Originale/` (liest LearnHarness nicht selbst): per Chat an Hermes
+  oder automatisch aus iCloud über `integrations/mac/subject-sync.sh` (das
+  Startsymbol kopiert beim Start und alle 15 Minuten).
 - Etappe 2 (noch offen): aus `plan.md` automatisch Sessions pro Thema,
   Anzeige in Notch und Übersicht.
 

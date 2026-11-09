@@ -40,11 +40,18 @@ echo $$ >"$LOCK"
 notify "LearnHarness startet…"
 
 TUNNEL_PID=""
+SYNC_PID=""
 cleanup() {
-	if [ -n "$TUNNEL_PID" ]; then
-		pkill -P "$TUNNEL_PID" 2>/dev/null
-		kill "$TUNNEL_PID" 2>/dev/null
-	fi
+	for pid in "$TUNNEL_PID" "$SYNC_PID"; do
+		if [ -n "$pid" ]; then
+			# Note what the loop runs (ssh, sleep, a copy), stop the loop so it
+			# cannot start another round, then stop what it ran.
+			kids="$(pgrep -P "$pid" 2>/dev/null || true)"
+			kill "$pid" 2>/dev/null
+			# shellcheck disable=SC2086
+			[ -n "$kids" ] && kill $kids 2>/dev/null
+		fi
+	done
 	rm -f "$LOCK"
 	echo "=== $(date '+%Y-%m-%d %H:%M:%S') stop"
 }
@@ -91,6 +98,18 @@ if [ -n "${LH_HERMES_SSH:-}" ]; then
 		done
 		nc -z 127.0.0.1 "$PORT" 2>/dev/null || notify "Keine Verbindung zu Hermes – LearnHarness startet trotzdem."
 	fi
+fi
+
+# 3b. Subject materials iCloud → Google Drive for Hermes (integrations/mac/
+#     subject-sync.sh): now and every 15 min while LearnHarness is open.
+if [ -s "$CONFIG_DIR/subjects.conf" ]; then
+	(
+		while true; do
+			bash "$REPO/integrations/mac/subject-sync.sh" once || echo "subject-sync failed (exit $?)"
+			sleep 900
+		done
+	) &
+	SYNC_PID=$!
 fi
 
 # 4. LearnHarness (the window opens by itself; Cmd+Q ends everything).

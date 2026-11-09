@@ -36,3 +36,29 @@ Läuft Hermes auf diesem Mac, das Argument weglassen.
 - Probleme? Log: `~/Library/Logs/LearnHarness-launcher.log`
 - Code-Ordner nicht in Google Drive legen (tausende Dateien, Konflikte mit
   Git) – GitHub ist der Weg für Updates, Drive nur für deine Notizen.
+
+## Fach-Unterlagen aus iCloud für Hermes
+
+Hermes läuft auf dem Server und sieht iCloud nicht, aber Google Drive. Das
+Startsymbol kopiert deshalb neue oder geänderte Dateien eines Fach-Ordners
+aus iCloud nach `<Brain>/LearnHarness/Faecher/<Fach>/Originale/` (Google
+Drive) — beim Start und alle 15 Minuten, solange LearnHarness offen ist.
+Hermes macht daraus Text in `Folien/` bzw. `Klausuren/`, den die
+Fach-Überprüfung liest. Es wird nie etwas gelöscht; ausgelagerte
+iCloud-Dateien holt das Skript vorher auf den Mac.
+
+Einmalig pro Fach (Pfad: Ordner im Finder auswählen, ⌥ + Rechtsklick →
+„als Pfadname kopieren“):
+
+```bash
+~/LearningHarness/integrations/mac/subject-sync.sh add "IntSec" "/Pfad/zum/iCloud/IntSec"
+```
+
+Prüfen bzw. sofort kopieren:
+
+```bash
+~/LearningHarness/integrations/mac/subject-sync.sh list
+```
+```bash
+~/LearningHarness/integrations/mac/subject-sync.sh once
+```
