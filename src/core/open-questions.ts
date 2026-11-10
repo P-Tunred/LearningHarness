@@ -115,11 +115,31 @@ function isCheck(call: Call): boolean {
 	return (call.name === "quiz" || call.name === "explain") && normalizeQuizType(call.type) !== "predict";
 }
 
+/** Below this many shared leading characters two ids are not "the same id". */
+const MIN_ID_OVERLAP = 16;
+
+/**
+ * The real question id a model meant (Paul, 2026-11-10): models copy long
+ * call ids imperfectly — "call_67441a23c7c04fa5ba75c308" came back with
+ * "40" appended. An exact id wins; otherwise the ONE known id that the
+ * given one extends, or that extends it, by a long shared start. null =
+ * nothing, or more than one, fits. Exported for tests and the quiz check.
+ */
+export function matchQuestionId(given: string, known: Iterable<string>): string | null {
+	const ids = [...known];
+	if (ids.includes(given)) return given;
+	const fits = ids.filter((k) => Math.min(k.length, given.length) >= MIN_ID_OVERLAP && (given.startsWith(k) || k.startsWith(given)));
+	return fits.length === 1 ? fits[0]! : null;
+}
+
 export function questionLedger(messages: readonly unknown[]): QuestionLedger {
 	const calls = questionCalls(messages);
 	const items = new Map<string, Item>();
 	const aliases = new Map<string, string>();
-	const resolve = (id: string) => aliases.get(id) ?? id;
+	const resolve = (raw: string) => {
+		const id = matchQuestionId(raw, calls.keys()) ?? raw;
+		return aliases.get(id) ?? id;
+	};
 	const answeredNodes = new Set<string>();
 	let questions = 0;
 	for (const m of messages) {

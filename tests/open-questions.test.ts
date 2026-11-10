@@ -8,12 +8,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { LOW_CONFIDENCE, questionLedger } from "../src/core/open-questions.ts";
+import { LOW_CONFIDENCE, matchQuestionId, questionLedger } from "../src/core/open-questions.ts";
 import { digestSession, summarizeExams } from "../src/core/brain-export.ts";
 import { derivePlanStatusesLh } from "../src/core/contracts/plan.ts";
 import type { ChatRecord } from "../src/core/contracts/chat.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
-import { openQuestionsText, revisitsProblem } from "../src/agent/tools/open-questions.ts";
+import { openQuestionsText } from "../src/agent/tools/open-questions.ts";
 import { examTopicPromptNote, topicMissing, topicStatusText } from "../src/core/topic-status.ts";
 
 const GOLDEN = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "golden-data");
@@ -89,8 +89,19 @@ describe("questionLedger", () => {
 		assert.deepEqual(l.open, [], "r1 resolves to a, which the sure right answer closes");
 		assert.equal(l.graded, 1);
 		assert.equal(l.correct, 1);
-		const ctx = { chatId: "c1", chatStore: { getChat: () => ({ messages: msgs }) } } as never;
-		assert.equal(revisitsProblem(ctx, "r1"), null, "the quiz check accepts the newer id too");
+	});
+
+	it("a mis-copied id still finds its question (Paul's 2026-11-10 cases)", () => {
+		const real = "call_67441a23c7c04fa5ba75c308";
+		const known = [real, "call_1320b565f18c4f4e91a0ae14", "call_4dfff26bd666461dbb2c4b65"];
+		assert.equal(matchQuestionId("call_67441a23c7c04fa5ba75c30840", known), real, "two characters appended");
+		assert.equal(matchQuestionId("call_67441a23c7c04fa5", known), real, "cut short");
+		assert.equal(matchQuestionId(real, known), real);
+		assert.equal(matchQuestionId("call_fae08172dfbb4e56bd1bd8e945d59d6f", known), null, "nothing fits");
+		assert.equal(matchQuestionId("call_", known), null, "too short to mean one");
+		assert.equal(matchQuestionId("call_67441a23c7c04fa5", [...known, "call_67441a23c7c04fa5ffff0000"]), null, "two fit: none");
+		const l = questionLedger([...qa(real, { correct: false }), ...qa("r", { correct: true, confidence: 90 }, { revisits: "call_67441a23c7c04fa5ba75c30840" })]);
+		assert.deepEqual(l.open, [], "the re-ask closes the question it meant");
 	});
 
 	it("a re-ask replaces the original for understanding too", () => {
@@ -160,19 +171,16 @@ describe("tutor seam", () => {
 		assert.equal(out.openQuestions[0]!.nodeId, "n1");
 	});
 
-	it("quiz.revisits: open ids, re-ask ids and other questions pass; only unknown ids are rejected", () => {
-		assert.equal(revisitsProblem(ctx, undefined), null);
-		assert.equal(revisitsProblem(ctx, ""), null, "an empty field means none — no needless retry");
-		assert.equal(revisitsProblem(ctx, "  "), null);
-		assert.equal(revisitsProblem(ctx, " a "), null, "ids are trimmed");
-		assert.equal(revisitsProblem(ctx, "a"), null);
-		assert.match(revisitsProblem(ctx, "zzz") ?? "", /names no question of this session/);
-		// A guess or probe question is not open, but re-asking it is fine:
-		// it goes through as a new check (Paul, 2026-11-09).
+	it("quiz.revisits never makes the quiz fail; an id naming no open question just asks a new check", async () => {
+		const { teachQuizToolFor } = await import("../src/agent/tools.ts");
 		const guesses = [...qa("pr", { correct: false }, { tool: "probe" }), ...qa("pd", { dontKnow: true }, { type: "predict" })];
-		const g = { chatId: "c1", chatStore: { getChat: () => ({ messages: guesses }) } } as never;
-		assert.equal(revisitsProblem(g, "pr"), null);
-		assert.equal(revisitsProblem(g, "pd"), null);
+		const record = { messages: guesses, tree: { nodes: [{ id: "n1", title: "One" }], edges: [] } };
+		const quiz = teachQuizToolFor({ chatId: "c1", chatStore: { getChat: () => record } as never });
+		const base = { type: "check", nodeId: "n1", question: "Q?", options: [{ label: "A", value: "a" }, { label: "B", value: "b" }], explanation: "Because.", correctAnswer: "a" };
+		for (const revisits of ["", "  ", "pr", "pd", "zzz", "call_fae08172dfbb4e56bd1bd8e945d59d6f"]) {
+			const res = await quiz.execute("t1", { ...base, revisits } as never);
+			assert.equal((res as { terminate?: boolean }).terminate, true, `revisits ${JSON.stringify(revisits)} poses the question`);
+		}
 		const l = questionLedger([...guesses, ...qa("n", { correct: false }, { revisits: "pr" })]);
 		assert.deepEqual(l.open.map((q) => q.id), ["n"], "it counts as a new check of its own");
 	});

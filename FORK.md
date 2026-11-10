@@ -136,7 +136,10 @@ nicht jede Aussage.
   stellt (gleich oder umformuliert, Quiz mit `revisits: <id>`) und du sie
   **richtig und sicher** beantwortest (stellt der Tutor eine Frage neu, die
   nicht offen ist – z. B. eine Rate- oder Einstiegsfrage –, gilt sie
-  einfach als neue Check-Frage, ohne „Retrying…“; Diagnose:
+  einfach als neue Check-Frage, ohne „Retrying…“. Das Feld löst nie eine
+  Ablehnung aus: verschriebene Ids – das Modell hängt gern Zeichen an –
+  werden der passenden Frage zugeordnet (`matchQuestionId`), eine Id ohne
+  Treffer macht einfach eine neue Check-Frage; Diagnose:
   `node scripts/tool-errors.mjs`). Die Wiederholung **ersetzt** die
   alte Antwort, auch für „Verstanden“ (eine Frage zählt einmal, mit ihrer
   letzten Antwort); falsch/unsicher lässt sie offen.

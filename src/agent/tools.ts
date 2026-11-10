@@ -18,7 +18,7 @@ import type { JobStore } from "../core/ports.ts";
 import { jobTools, type DemoInput, type PdfInput, type ResearchInput, type VisualInput } from "./tools/jobs.ts";
 import { planTools, type PlanToolContext } from "./tools/plan.ts";
 import { probeDoneTool, type ProbeDoneContext } from "./tools/probe.ts";
-import { openQuestionsTool, revisitsProblem } from "./tools/open-questions.ts";
+import { openQuestionsTool } from "./tools/open-questions.ts";
 import { topicStatusTool } from "./tools/topic-status.ts";
 import type { TopicStatus } from "../core/topic-status.ts";
 import { proberGraphTools } from "./tools/graph.ts";
@@ -387,8 +387,6 @@ export function teachQuizToolFor(ctx: Pick<PlanToolContext, "chatId" | "chatStor
 			const problems = [...quizInputProblems(input)];
 			const nodeIdProblemText = nodeIdProblem(ctx, input.nodeId);
 			if (nodeIdProblemText) problems.push(nodeIdProblemText);
-			const revisitsProblemText = revisitsProblem(ctx, input.revisits);
-			if (revisitsProblemText) problems.push(revisitsProblemText);
 			if (problems.length > 0) return invalidInputResult("quiz", problems);
 			return questionResult();
 		},

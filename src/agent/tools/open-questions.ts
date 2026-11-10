@@ -35,41 +35,11 @@ export function openQuestionsText(messages: readonly unknown[]): string {
 	});
 }
 
-/** Ids of every tool call in the transcript (the questions among them). */
-function questionCallIds(messages: readonly unknown[]): Set<string> {
-	const ids = new Set<string>();
-	for (const m of messages) {
-		const msg = m as { role?: unknown; content?: unknown };
-		if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue;
-		for (const b of msg.content as Array<{ type?: unknown; id?: unknown }>) {
-			if (b?.type === "toolCall" && typeof b.id === "string") ids.add(b.id);
-		}
-	}
-	return ids;
-}
-
-/** The `revisits` check the teach quiz chains after its own contract. */
-export function revisitsProblem(ctx: Pick<PlanToolContext, "chatId" | "chatStore">, raw: string | undefined): string | null {
-	// Models often fill an optional field with "" — that means "none", not
-	// an id (it caused needless "Retrying…" rounds). The ledger trims too.
-	const revisits = raw?.trim();
-	if (!revisits) return null;
-	const messages = ctx.chatStore.getChat(ctx.chatId)?.messages ?? [];
-	const { open, aliases } = questionLedger(messages);
-	// A re-ask's own id stands for the original (the tutor sees the newest call).
-	const id = aliases.get(revisits) ?? revisits;
-	if (open.some((q) => q.id === id)) return null;
-	// Any other question of this chat (a prediction, a probe question, one
-	// already closed) goes through as a NEW check — no retry for that
-	// (Paul, 2026-11-09). Only an id that names nothing here is rejected.
-	if (questionCallIds(messages).has(revisits)) return null;
-	return (
-		`revisits "${revisits}" names no question of this session. ` +
-		(open.length > 0
-			? `Copy an id from open_questions exactly (${open.slice(0, 3).map((q) => q.id).join(", ")}${open.length > 3 ? ", …" : ""}), or leave revisits out.`
-			: "This session has no open questions — leave revisits out.")
-	);
-}
+// No call-time check on quiz.revisits (Paul, 2026-11-10: "it should not
+// be like this" — every rejection was a "Retrying…"). The ledger resolves
+// the id — exact, a re-ask's own id, or a mis-copied one (matchQuestionId)
+// — and a right and sure answer closes the open question it names. An id
+// that names no open question makes the quiz an ordinary new check.
 
 export function openQuestionsTool(ctx: Pick<PlanToolContext, "chatId" | "chatStore">): AgentTool<typeof openQuestionsInput> {
 	return {

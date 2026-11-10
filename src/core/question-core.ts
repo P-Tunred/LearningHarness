@@ -272,7 +272,7 @@ export const quizInputObject = Type.Object({
 		Type.String({
 			description:
 				"Optional. The id of an open question (from open_questions) that this question re-asks, same or reworded — " +
-				"validated at call time. A right and confident answer closes that open question; any other answer keeps it open. " +
+				"copy it exactly. A right and confident answer closes that open question; any other answer keeps it open. " +
 				"An id of a question that is not open makes this an ordinary new question.",
 		}),
 	),
