@@ -57,6 +57,7 @@ import { brainPromptNote } from "./brain-folder.ts";
 // called at request time — never during module evaluation.
 import { examTopicOf, topicStatusNow } from "./brain.ts";
 import { examTopicPromptNote } from "../core/topic-status.ts";
+import { LEARNER_QUESTIONS_NOTE } from "../core/learner-questions.ts";
 import {
 	ChatInputError,
 	inputAppends,
@@ -476,7 +477,8 @@ export async function handleChatInput(
 		// Fork addition: where the Second Brain is (read-only lookups), and
 		// in an exam topic chat the topic + its finish rule (stable text;
 		// the live numbers come from topic_status).
-		promptAppendix: [brainPromptNote(), examTopic ? examTopicPromptNote(examTopic.exam, examTopic.topic) : null]
+		// His questions are always answered before the next quiz (Paul, 2026-11-10).
+		promptAppendix: [LEARNER_QUESTIONS_NOTE, brainPromptNote(), examTopic ? examTopicPromptNote(examTopic.exam, examTopic.topic) : null]
 			.filter((s): s is string => !!s)
 			.join("\n\n") || undefined,
 	};

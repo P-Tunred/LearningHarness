@@ -140,6 +140,11 @@ nicht jede Aussage.
   `node scripts/tool-errors.mjs`). Die Wiederholung **ersetzt** die
   alte Antwort, auch für „Verstanden“ (eine Frage zählt einmal, mit ihrer
   letzten Antwort); falsch/unsicher lässt sie offen.
+- **Deine Fragen zuerst** (`src/core/learner-questions.ts`, in jedem
+  Lern-Chat im Prompt): Steht in deiner Nachricht oder im Thinking-Feld eine
+  Frage, beantwortet der Tutor sie vollständig, bevor er die nächste Frage
+  stellt; ohne Frage darf er direkt weitermachen. Diagnose, wie seine
+  Antworten endeten: `node scripts/last-turns.mjs "<Chat-Titel>" 20`.
 - **Tutor kennt die Regel**: In Themen-Chats eines Auftrags steht im
   Prompt (fester Text, Cache bleibt warm) Thema und Fertig-Regel; das
   Werkzeug `topic_status` liefert die aktuellen Zahlen und was fehlt. Der
