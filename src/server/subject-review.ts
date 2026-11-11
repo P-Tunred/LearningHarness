@@ -80,6 +80,12 @@ function readState(): StateFile {
 	return { version: 1, subjects: {} };
 }
 
+/** The latest review result of a subject, or null (fork: exam plans that
+ *  opted in with `fach:` read their topics from here). */
+export function subjectResult(subject: string): ReviewResult | null {
+	return readState().subjects[subject]?.result ?? null;
+}
+
 function writeAtomic(file: string, content: string): void {
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;

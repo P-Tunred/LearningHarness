@@ -13,6 +13,10 @@
  * the title.
  * Escape or a click outside folds it back; the open/closed choice is
  * remembered on this device. Hidden while no exam plan runs.
+ * Subject switcher (Paul, 2026-11-11): with more than one exam, the open
+ * notch starts with All · one button per exam. The chosen exam is what the
+ * closed notch speaks for (outside a topic chat) and what the home graph
+ * shows (components/chosen-exam.ts); All = nearest exam, whole graph.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -22,6 +26,8 @@ import { ChevronDownIcon, MaximizeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Active, ExamBlock, hm, pct, STANDING, standingLabel, useExamProgress } from "@/components/exam-progress";
 import { XpFloat } from "@/components/xp-float";
+import { chosenAmong, useChosenExam } from "@/components/chosen-exam";
+import { ExamSwitcher } from "@/components/exam-switcher";
 import { UNDERSTANDING_TARGET } from "@/src/core";
 
 const OPEN_KEY = "lh.examNotch.open";
@@ -97,8 +103,10 @@ export function ExamNotch() {
 	// Hover shows the topic's two bars (Paul, 2026-11-09).
 	const [hover, setHover] = useState(false);
 	const hoverRef = useRef(false);
+	const [chosenName, choose] = useChosenExam();
+	const chosen = chosenAmong(exams, chosenName);
 	const topic = topicOfChat(exams, chatIdFrom(pathname));
-	const p = topic?.exam ?? nearestExam(exams);
+	const p = topic?.exam ?? chosen ?? nearestExam(exams);
 	const shown = !!p;
 
 	// The resting height of the closed notch, for the chat's top bar to
@@ -228,6 +236,7 @@ export function ExamNotch() {
 
 			{open && (
 				<div id="exam-notch-panel" className="flex max-h-[70dvh] flex-col gap-2 overflow-y-auto border-t border-border/60 px-3 pb-3 pt-2">
+					<ExamSwitcher exams={exams} chosen={chosen?.exam ?? null} onChoose={choose} />
 					{[...exams]
 						.sort((a, b) => a.daysToExam - b.daysToExam)
 						.map((e) => (

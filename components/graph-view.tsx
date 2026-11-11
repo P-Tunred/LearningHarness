@@ -77,6 +77,8 @@ import { MenuShell } from "@/components/menu-shell.tsx";
 import { DeleteNodeDialog } from "@/components/delete-node-dialog.tsx";
 import { ChainTableOverlay } from "@/components/chain-table.tsx";
 import { Hint } from "@/components/ui/hint";
+import { useExamProgress } from "@/components/exam-progress";
+import { chosenAmong, examChatIds, subjectNodeIds, useChosenExam } from "@/components/chosen-exam";
 import {
 	ARROW_LENGTH_LADDER,
 	CHARGE_RANGE,
@@ -1022,14 +1024,23 @@ export function GraphView({
 
 	// The id set that survives the current search — consumed by the
 	// visibility feed and the "no matches" hint.
+	// Subject switcher (fork addition, 2026-11-11): the exam chosen in the
+	// notch narrows the graph to its topic sessions; All (null) = no filter.
+	const { exams } = useExamProgress();
+	const [chosenName] = useChosenExam();
+	const chosenExam = chosenAmong(exams, chosenName);
+	const subjectIds = useMemo(
+		() => (snapshot && chosenExam ? subjectNodeIds(snapshot, examChatIds(chosenExam)) : null),
+		[snapshot, chosenExam],
+	);
 	const visibleIds = useMemo(() => {
 		const set = new Set<string>();
 		if (snapshot)
 			for (const node of snapshot.nodes) {
-				if (isNodeVisible(node, query)) set.add(node.id);
+				if ((!subjectIds || subjectIds.has(node.id)) && isNodeVisible(node, query)) set.add(node.id);
 			}
 		return set;
-	}, [snapshot, query]);
+	}, [snapshot, query, subjectIds]);
 
 	// Fetch the derived graph. Re-runs when a background pipeline run
 	// finishes (refreshTick) — its merges just landed in the ledger.
@@ -1419,10 +1430,10 @@ export function GraphView({
 	// Feed #3 — visibility: hidden nodes drop out of rendering, picking,
 	// hover, AND labels; edges drop when either endpoint is hidden.
 	useEffect(() => {
-		rendererRef.current?.setVisible(query.trim() ? visibleIds : null);
+		rendererRef.current?.setVisible(query.trim() || subjectIds ? visibleIds : null);
 		// The open detail card cannot outlive its node's visibility.
 		setSelected((sel) => (sel && visibleIds.has(sel.node.id) ? sel : null));
-	}, [visibleIds, query]);
+	}, [visibleIds, query, subjectIds]);
 
 	// Feed #4 — region tuning. `isEmpty` in the deps (same as Feed #2):
 	// the settings fetch resolves BEFORE the snapshot creates the renderer,
@@ -1490,6 +1501,28 @@ export function GraphView({
 							style={{ position: "absolute", left: ctxNode.x, top: ctxNode.y, width: 0, height: 0 }}
 						/>
 					)}
+				</div>
+			)}
+
+			{/* Subject switcher: the chosen exam has nothing learned yet, so its
+			    filter leaves the canvas blank — say so and point at the next
+			    topic instead of an empty screen (Paul, 2026-11-11). */}
+			{!isEmpty && chosenExam && subjectIds?.size === 0 && (
+				<div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4" data-testid="graph-subject-empty">
+					<div className="pointer-events-auto flex max-w-sm flex-col items-center gap-2 text-center text-sm text-muted-foreground">
+						<WaypointsIcon className="size-8 opacity-40" strokeWidth={1.25} />
+						<div className="font-medium text-foreground">Nothing learned in {chosenExam.exam} yet</div>
+						{chosenExam.upNext[0]?.chatId ? (
+							<Link
+								href={`/chat/${chosenExam.upNext[0].chatId}`}
+								className="rounded-md px-2 py-1 text-foreground underline-offset-4 transition-colors hover:bg-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+							>
+								Up next: {chosenExam.upNext[0].title} →
+							</Link>
+						) : (
+							<p>Its topics show up here once you work through them.</p>
+						)}
+					</div>
 				</div>
 			)}
 

@@ -47,6 +47,7 @@ import { joinPages } from "../agent/subagents/pdf-markdown.ts";
 import { configuredBrainFolder, exportDirFor, usableFolder } from "./brain-folder.ts";
 import { examOverviews, syncExamPlans } from "./exam-plans.ts";
 import { reviewSubjects, type SubjectReviewOutcome } from "./subject-review.ts";
+import { extendExamPlansFromSubjects } from "./subject-exam-plan.ts";
 import { extraction } from "./chat-handler.ts";
 import { sourceDirectory } from "./source-organization.ts";
 import { stores } from "./stores.ts";
@@ -81,6 +82,8 @@ interface BrainGlobal {
 		running: Promise<void> | null;
 		exportTimer: ReturnType<typeof setTimeout> | null;
 		unsubscribe: (() => void) | null;
+		/** Fork addition: re-checks the subject folders while the app runs. */
+		subjectTimer?: ReturnType<typeof setInterval> | null;
 	};
 }
 
@@ -413,8 +416,14 @@ function runExport(root: string): void {
 	});
 }
 
-/** Create the sessions new Klausur-Aufträge ask for; never fatal for the sync. */
+/** Create the sessions new Klausur-Aufträge ask for; never fatal for the sync.
+ *  Fork: plans that name a subject first take its new topics (2026-11-11). */
 function runExamPlans(root: string): void {
+	try {
+		extendExamPlansFromSubjects(root);
+	} catch (err) {
+		console.error("[faecher] extending exam plans failed:", err);
+	}
 	try {
 		const exams = syncExamPlans(root);
 		setStatus({ exams });
@@ -476,8 +485,12 @@ function startSubjectReviews(root: string): void {
 	})
 		.then((outcomes) => {
 			setStatus({ subjects: { running: null, outcomes, finishedAt: new Date().toISOString() } });
-			// New plans are worth a fresh overview in the brain.
-			if (outcomes.some((o) => o.status === "reviewed")) scheduleExport();
+			// New plans are worth a fresh overview in the brain — and new
+			// topics of a subject become sessions of its exam plan (fork).
+			if (outcomes.some((o) => o.status === "reviewed")) {
+				void exclusive(async () => runExamPlans(root));
+				scheduleExport();
+			}
 		})
 		.catch((err) => {
 			console.error("[faecher] review pass failed:", err);
@@ -486,8 +499,27 @@ function startSubjectReviews(root: string): void {
 		.finally(() => { g.__lhSubjectReview = null; });
 }
 
+/** Fork addition (Paul, 2026-11-11): the review used to run only at app
+ *  start, and the app stays open for days — Lecture 1 of IntSec was turned
+ *  into text on 11-10 and never reached plan.md. Now the subject folders are
+ *  re-checked every 15 minutes (the Mac copies new iCloud files at the same
+ *  rhythm). Cheap when nothing changed: reviewSubjects compares fingerprints
+ *  and only calls the model for a subject whose material is new. */
+const SUBJECT_RECHECK_MS = 15 * 60 * 1000;
+
+function startSubjectRecheck(): void {
+	const rt = runtime();
+	if (rt.subjectTimer) return;
+	rt.subjectTimer = setInterval(() => {
+		const root = resolveOrReport();
+		if (root) startSubjectReviews(root);
+	}, SUBJECT_RECHECK_MS);
+	rt.subjectTimer.unref?.();
+}
+
 export function startBrainSync(options: { force?: boolean } = {}): Promise<void> {
 	const rt = runtime();
+	startSubjectRecheck();
 	if (!rt.unsubscribe) {
 		rt.unsubscribe = subscribe((event) => {
 			if (event.type === "turn-settled" || event.type === "chats-changed" || event.type === "record-changed") scheduleExport();

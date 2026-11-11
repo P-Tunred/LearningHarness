@@ -53,6 +53,9 @@ const STORAGE_KEY = "lh:sidebar-open";
 import type { ChatGPTControlBridge, NativeSubscriptionControlBridge } from "@/src/core";
 import type { UpdateState } from "@/components/settings/update-settings.tsx";
 import { FilePathDropZone } from "@/components/file-path-drop-zone";
+import { useExamProgress } from "@/components/exam-progress";
+import { chosenAmong, examChatIds, inPlanOrder, useChosenExam } from "@/components/chosen-exam";
+import { ExamSwitcher } from "@/components/exam-switcher";
 const SIDEBAR_AUTOCLOSE = 928;
 
 // Module scope, guarded for SSR (the server has no navigator).
@@ -407,6 +410,14 @@ function SessionsSidebar() {
 	const pathname = usePathname();
 	const router = useRouter();
 	const { open: openSettings } = useSettingsDialog();
+	// Subject switcher (fork addition, Paul 2026-11-11: "switch topics with
+	// the chats on the left … so I don't get confused"): the chosen exam
+	// narrows the list to its topic sessions. The open chat always stays.
+	const { exams } = useExamProgress();
+	const [chosenName, chooseExam] = useChosenExam();
+	const chosenExam = chosenAmong(exams, chosenName);
+	const subjectChats = useMemo(() => (chosenExam ? examChatIds(chosenExam) : null), [chosenExam]);
+	const openChatId = /^\/chat\/([^/]+)$/.exec(pathname ?? "")?.[1] ?? null;
 
 	/* New session (owner, 2026-09-13): NO POST — the button opens the
 	   sessionless draft view; the session is created only when the first
@@ -425,6 +436,10 @@ function SessionsSidebar() {
 		if (list && kindFilter !== "all") {
 			list = list.filter((c) => (c.kind ?? "teach") === kindFilter);
 		}
+		if (list && subjectChats && chosenExam) {
+			// In the plan's order: the left side reads as the learning path.
+			list = inPlanOrder(list.filter((c) => subjectChats.has(c.id) || c.id === openChatId), chosenExam);
+		}
 		if (!list) return list;
 		if (!q) return list;
 		return list
@@ -432,7 +447,7 @@ function SessionsSidebar() {
 			.filter((r): r is { c: (typeof list)[number]; score: number } => r.score !== null)
 			.sort((a, b) => b.score - a.score)
 			.map((r) => r.c);
-	}, [chats, query, kindFilter]);
+	}, [chats, query, kindFilter, subjectChats, chosenExam, openChatId]);
 
 	const refreshInFlightRef = useRef(false);
 	const refresh = useCallback(async () => {
@@ -789,6 +804,7 @@ function SessionsSidebar() {
 				    Practice / All — the real modes first, "All" as the escape
 				    hatch on the right, mirroring the create-buttons above.
 				    Persisted client-side. */}
+				<ExamSwitcher className="mx-3 mb-1.5" exams={exams} chosen={chosenExam?.exam ?? null} onChoose={chooseExam} />
 				<div className="mx-3 flex items-center gap-0.5 rounded-md border border-border/60 bg-background p-0.5" data-testid="session-kind-filter">
 					{(["teach", "practice", "all"] as const).map((f) => (
 						<button
