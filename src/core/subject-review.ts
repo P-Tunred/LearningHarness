@@ -158,8 +158,21 @@ export const REVIEW_SCHEMA = Type.Object({
 		{ description: "Contradictions or inconsistencies between materials." },
 	),
 	openQuestions: Type.Array(Type.String(), { description: "What Paul should clarify (missing info, unclear scope)." }),
+	lectures: Type.Array(
+		Type.Object({
+			file: Type.String({ description: "The slide file's exact material name, e.g. 'Folien/Woche 03.md'. Every file in Folien/ exactly once." }),
+			title: Type.String({ description: "What the lecture is about, in a few words (e.g. 'Firewalls and packet filtering')." }),
+			weight: Weight,
+			effortHours: Type.Number({ description: "Hours Paul should plan to learn this lecture exam-ready from scratch (0.25–40)." }),
+			examRelevant: Type.Array(Type.String(), { description: "What he must master for the exam, most important first; each point names its past-exam evidence when there is some." }),
+			brief: Type.Array(Type.String(), { description: "What only needs a quick look (rarely or never asked)." }),
+			taskFormats: Type.String({ description: "How past exams ask this lecture's content (task types, points) — or 'no past exam evidence'." }),
+		}),
+		{ description: "Per lecture (one slide file each): the exam-first analysis its learning session starts from." },
+	),
 });
 export type ReviewResult = Static<typeof REVIEW_SCHEMA>;
+export type Lecture = ReviewResult["lectures"][number];
 export type Topic = ReviewResult["topics"][number];
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -178,11 +191,17 @@ export function fillReview(raw: Partial<ReviewResult>): ReviewResult {
 		changes: raw.changes ?? [],
 		conflicts: raw.conflicts ?? [],
 		openQuestions: raw.openQuestions ?? [],
+		lectures: (raw.lectures ?? []).map((l) => ({
+			...l,
+			examRelevant: l.examRelevant ?? [],
+			brief: l.brief ?? [],
+			taskFormats: l.taskFormats ?? "",
+		})),
 	};
 }
 
 /** The laws a run must keep; a problem string makes the model retry. */
-export function validateReview(r: ReviewResult, previousTitles: readonly string[]): string | null {
+export function validateReview(r: ReviewResult, previousTitles: readonly string[], slideFiles: readonly string[] = []): string | null {
 	const titles = r.topics.map((t) => t.title.trim());
 	if (titles.some((t) => !t)) return "Every topic needs a title.";
 	const seen = new Set<string>();
@@ -203,18 +222,32 @@ export function validateReview(r: ReviewResult, previousTitles: readonly string[
 	if (lost.length) {
 		return `These topics of the previous plan are missing: ${lost.join(", ")}. Keep each one (active or obsolete with a reason in note), or list it as renamed/merged/split in changes.`;
 	}
+	// Every slide file is one lecture, exactly once (its learning session).
+	const wanted = new Set(slideFiles);
+	const counted = new Map<string, number>();
+	for (const l of r.lectures) {
+		if (!wanted.has(l.file)) return `lectures names "${l.file}", which is not a slide file. Use the exact names: ${slideFiles.join(", ")}.`;
+		counted.set(l.file, (counted.get(l.file) ?? 0) + 1);
+		if (!(l.effortHours >= 0.25 && l.effortHours <= 40)) return `effortHours of lecture "${l.file}" must be between 0.25 and 40.`;
+		if (!l.title.trim()) return `Lecture "${l.file}" needs a title.`;
+	}
+	const twice = [...counted].filter(([, n]) => n > 1).map(([f]) => f);
+	if (twice.length) return `Each slide file is one lecture, once: ${twice.join(", ")} appear more than once.`;
+	const missingLectures = slideFiles.filter((f) => !counted.has(f));
+	if (missingLectures.length) return `These slide files have no entry in lectures: ${missingLectures.join(", ")}. Analyse every lecture.`;
 	return null;
 }
 
 // ─── The prompt ──────────────────────────────────────────────────────────────
 
-export const REVIEW_SYSTEM_PROMPT = `You maintain the study plan for one university subject of Paul, a student. You are called whenever new material (weekly lecture slides, past exams) arrives. Look at the WHOLE subject every time — never plan lecture by lecture.
+export const REVIEW_SYSTEM_PROMPT = `You maintain the study plan for one university subject of Paul, a student. You are called whenever new material (weekly lecture slides, past exams) arrives. Look at the WHOLE subject every time — topics are planned across lectures, never lecture by lecture; separately, each lecture gets its own exam-first analysis for its learning session (point 5).
 
-Produce the complete updated plan and submit it with submit_plan. Check four things and let them shape the plan:
+Produce the complete updated plan and submit it with submit_plan. Check five things and let them shape it:
 1. Topics and connections. Group by concept across lectures: one topic may draw on several lectures, a lecture may feed several topics. Name prerequisites (titles of other topics in your plan). Report contradictions or inconsistencies between materials in conflicts.
 2. Exam relevance. Weight each topic by what the past exams actually ask (task types, points, how often) and say so in examEvidence. Without past exams, weight by emphasis in the slides and write "no past exam evidence".
 3. Paul's real understanding. Use only his learning record: topics he got wrong, did not know or was unsure about are "shaky" and need a note; "solid" needs clear evidence; no record means "not-started".
 4. The previous plan itself. It is your starting point and Paul may have edited it — respect his edits. Account for EVERY previous topic: keep it, change it, or mark it obsolete with the reason; renames, merges and splits go into changes with the OLD title. Never let a topic disappear silently. Keep titles stable so his progress stays attached.
+5. Every lecture for its own learning session. In lectures, give EVERY file in Folien/ exactly once (file = its exact name): what it is about, its weight and effort for the exam, what of it he must master for the exam (most important first, with the past-exam evidence), what only needs a quick look, and how past exams ask it. This is what the tutor teaches from, exam-first.
 
 Ground everything in the materials and cite them in sources by their names. Do not invent content that is not in the materials; if something needed is missing, say so in openQuestions. Topics should take about 1–6 hours each. Write titles, goals and notes in the language of the slides unless the subject notes name a language.`;
 
@@ -323,4 +356,69 @@ export function renderChanges(previous: string | null, subject: string, r: Revie
 	].join("\n");
 	const earlier = (previous ?? "").replace(/^# .*\n/, "").split(/\n(?=## )/).map((s) => s.trim()).filter(Boolean);
 	return `${header}\n${[section, ...earlier].slice(0, MAX_CHANGE_RUNS).join("\n\n")}\n`;
+}
+
+// ─── One learning session per lecture (Paul, 2026-11-12) ────────────────────
+//
+// "Ich lade jede Vorlesung hoch und lerne sie, optimiert auf die Klausur":
+// the review's per-lecture analysis becomes a Klausur-Auftrag
+// (src/core/exam-plan.ts) at LearnHarness/Auftraege/<Fach> Vorlesungen.md.
+// The existing plan machinery then makes one session per lecture in the
+// exam's folder, with progress, notch, XP and topic_status — nothing new
+// downstream. Each section title comes from the FILE NAME, never from the
+// model, so it stays stable across runs and a session is never duplicated.
+
+/** File name of a subject's lecture plan inside LearnHarness/Auftraege/. */
+export const lecturePlanFile = (subject: string) => `${subject} Vorlesungen.md`;
+
+/** The stable session title of one lecture: "<Fach>: <file name without extension>". */
+export function lectureTitle(subject: string, file: string): string {
+	const base = file.split("/").pop() ?? file;
+	return `${subject}: ${base.replace(/\.(md|markdown|txt|pdf)$/i, "").trim()}`;
+}
+
+/** Lectures in a natural order ("Woche 2" before "Woche 10"). */
+const byFile = (a: Lecture, b: Lecture) => a.file.localeCompare(b.file, undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * The Auftrag for a subject's lectures. `slidePath(file)` gives the path the
+ * tutor can read (absolute in the brain), `examsDir` the past exams.
+ * Written by LearnHarness — the header says so; edits are overwritten.
+ */
+export function renderLecturePlan(
+	subject: string,
+	meta: SubjectMeta,
+	lectures: readonly Lecture[],
+	paths: { slidePath: (file: string) => string; examsDir: string },
+	at: string,
+): string {
+	const fm = [
+		"---",
+		`klausur: ${meta.exam ?? subject}`,
+		...(meta.date ? [`datum: ${meta.date}`] : []),
+		...(meta.hoursPerWeek ? [`stunden_pro_woche: ${meta.hoursPerWeek}`] : []),
+		"---",
+	];
+	const lines = [
+		...fm,
+		`# ${subject}: eine Session pro Vorlesung`,
+		`Automatically written by LearnHarness from the subject review (${at.slice(0, 10)}) — edits here are overwritten; Paul's own notes go into fach.md.`,
+		"Every lecture is taught exam-first: the exam-relevant points first and deepest, the rest briefly, practised in the exams' task formats.",
+	];
+	for (const l of [...lectures].sort(byFile)) {
+		lines.push(
+			"",
+			`## ${lectureTitle(subject, l.file)}`,
+			`Gewicht: ${WEIGHT_DE[l.weight]}`,
+			`Aufwand: ${Math.round(l.effortHours * 4) / 4} h`,
+			"",
+			`Lecture: ${oneLine(l.title)}`,
+			`Slides (read them first): \`${paths.slidePath(l.file)}\``,
+			`Past exams: \`${paths.examsDir}\``,
+		);
+		if (l.examRelevant.length) lines.push("", "Exam-relevant — master these, most important first:", ...l.examRelevant.map((x) => `- ${oneLine(x)}`));
+		if (l.brief.length) lines.push("", "Only needs a quick look:", ...l.brief.map((x) => `- ${oneLine(x)}`));
+		lines.push("", `How the exams ask it: ${oneLine(l.taskFormats) || "no past exam evidence"}`);
+	}
+	return `${lines.join("\n")}\n`;
 }

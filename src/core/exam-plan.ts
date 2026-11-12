@@ -37,7 +37,7 @@ const WEIGHT_ALIASES: Record<string, ExamWeight> = {
 };
 
 /** Upper bounds so a malformed plan cannot flood the sidebar or a prompt. */
-const MAX_FOCUSES = 20;
+const MAX_FOCUSES = 40;
 const MAX_TITLE = 120;
 const MAX_TEXT = 6_000;
 

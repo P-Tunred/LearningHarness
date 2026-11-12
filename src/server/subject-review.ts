@@ -18,7 +18,7 @@ import path from "node:path";
 import { PATHS } from "../../config.ts";
 import { digestSession } from "../core/brain-export.ts";
 import type { ChatRecord } from "../core/contracts/chat.ts";
-import { examFolderName } from "../core/exam-plan.ts";
+import { EXAM_PLANS_DIR, examFolderName } from "../core/exam-plan.ts";
 import { topFolderName } from "../core/study-timer.ts";
 import {
 	CHANGES_FILE,
@@ -36,6 +36,8 @@ import {
 	renderChanges,
 	renderPlan,
 	validateReview,
+	lecturePlanFile,
+	renderLecturePlan,
 	type LearnerSession,
 	type Material,
 	type ReviewInput,
@@ -187,6 +189,13 @@ const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 
 export type Reviewer = (input: ReviewInput, previousTitles: string[]) => Promise<ReviewResult>;
 
+const slideNames = (materials: readonly Pick<Material, "kind" | "name">[]) => materials.filter((m) => m.kind === "slides").map((m) => m.name);
+
+/** Bumped when a run must cover more than before: every subject is then
+ *  reviewed once more even with unchanged materials. 2 = per-lecture
+ *  analysis for the lecture sessions (Paul, 2026-11-12). */
+const REVIEW_VERSION = 2;
+
 /** The real run: one submit agent on the strong engine. */
 export const modelReviewer: Reviewer = (input, previousTitles) => {
 	const engine = engineForRole("teacher");
@@ -197,7 +206,7 @@ export const modelReviewer: Reviewer = (input, previousTitles) => {
 		toolDescription: "Submit the complete updated study plan for the subject.",
 		parameters: REVIEW_SCHEMA,
 		fill: fillReview,
-		validate: (r) => validateReview(r, previousTitles),
+		validate: (r) => validateReview(r, previousTitles, slideNames(input.materials)),
 		systemPrompt: REVIEW_SYSTEM_PROMPT,
 		prompt: buildReviewPrompt(input),
 		engine,
@@ -212,6 +221,8 @@ export interface SubjectReviewOutcome {
 	subject: string;
 	status: "reviewed" | "unchanged" | "empty" | "failed";
 	topics?: number;
+	/** Lectures in the written lecture plan (one session each). */
+	lectures?: number;
 	newMaterials?: string[];
 	error?: string;
 }
@@ -234,7 +245,7 @@ export async function reviewSubjects(
 			continue;
 		}
 		const metaText = readOptional(path.join(dir, META_FILE));
-		const fingerprint = sha256([...files.map((f) => `${f.kind}|${f.name}|${f.hash}`), `meta|${sha256(metaText ?? "")}`].join("\n"));
+		const fingerprint = sha256([`review|v${REVIEW_VERSION}`, ...files.map((f) => `${f.kind}|${f.name}|${f.hash}`), `meta|${sha256(metaText ?? "")}`].join("\n"));
 		const prev = state.subjects[subject];
 		const planPath = path.join(dir, PLAN_FILE);
 		const previousPlan = readOptional(planPath);
@@ -253,15 +264,24 @@ export async function reviewSubjects(
 			const input: ReviewInput = { subject, meta, materials, previousPlan, learner: learnerSessions(subject, meta.exam), today: localDay(now) };
 			const result = await reviewer(input, previousTitles);
 			// The laws hold for injected reviewers too.
-			const problem = validateReview(result, previousTitles);
+			const problem = validateReview(result, previousTitles, slideNames(files));
 			if (problem) throw new Error(`Review broke a plan rule: ${problem}`);
 			const at = now.toISOString();
 			const run = (prev?.run ?? 0) + 1;
 			writeAtomic(planPath, renderPlan(subject, meta, result, at, run));
 			const changesPath = path.join(dir, CHANGES_FILE);
 			writeAtomic(changesPath, renderChanges(readOptional(changesPath), subject, result, at, newMaterials));
+			// One learning session per lecture: the analysis becomes a
+			// Klausur-Auftrag; syncExamPlans turns it into sessions.
+			if (result.lectures.length) {
+				const plan = renderLecturePlan(subject, meta, result.lectures, {
+					slidePath: (file) => path.join(dir, file),
+					examsDir: path.join(dir, PAST_EXAMS_DIR),
+				}, at);
+				writeAtomic(path.join(root, EXAM_PLANS_DIR, lecturePlanFile(subject)), plan);
+			}
 			state.subjects[subject] = { fingerprint, reviewedAt: at, run, materials: files.map((f) => f.name), result };
-			outcomes.push({ subject, status: "reviewed", topics: result.topics.filter((t) => t.status === "active").length, newMaterials });
+			outcomes.push({ subject, status: "reviewed", topics: result.topics.filter((t) => t.status === "active").length, lectures: result.lectures.length, newMaterials });
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);
 			state.subjects[subject] = { ...(prev ?? { fingerprint: "", run: 0, materials: [] }), lastError: error, lastAttemptAt: now.toISOString() };

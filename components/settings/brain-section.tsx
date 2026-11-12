@@ -20,7 +20,7 @@ interface BrainStatusView {
 	exams?: { plans: number; created: number; errors: string[] };
 	subjects?: {
 		running: string | null;
-		outcomes: Array<{ subject: string; status: "reviewed" | "unchanged" | "empty" | "failed"; topics?: number; newMaterials?: string[]; error?: string }>;
+		outcomes: Array<{ subject: string; status: "reviewed" | "unchanged" | "empty" | "failed"; topics?: number; lectures?: number; newMaterials?: string[]; error?: string }>;
 		finishedAt?: string;
 	};
 }
@@ -32,7 +32,7 @@ export function subjectLine(s: NonNullable<BrainStatusView["subjects"]>): string
 	return s.outcomes
 		.map((o) => {
 			switch (o.status) {
-				case "reviewed": return `${o.subject}: neu geplant (${o.topics ?? 0} Themen${o.newMaterials?.length ? `, ${o.newMaterials.length} neue Dateien` : ""})`;
+				case "reviewed": return `${o.subject}: neu geplant (${o.topics ?? 0} Themen${o.lectures ? `, ${o.lectures} Vorlesungs-Sessions` : ""}${o.newMaterials?.length ? `, ${o.newMaterials.length} neue Dateien` : ""})`;
 				case "unchanged": return `${o.subject}: aktuell (${o.topics ?? 0} Themen)`;
 				case "empty": return `${o.subject}: noch keine Folien`;
 				case "failed": return `${o.subject}: Fehler – ${o.error ?? "unbekannt"} (nächster Start versucht es erneut)`;

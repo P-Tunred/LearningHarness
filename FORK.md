@@ -188,7 +188,7 @@ der Text darunter geht als Notiz mit).
   `plan.md` (deine eigenen Änderungen daran inklusive) und deinen Lernstand im
   Fach (Sessions im Ordner „<Fach>“ oder „<Fach> Klausur“: Lernzeit, Antworten,
   was du nicht wusstest/falsch/unsicher hattest).
-- Sie prüft vier Dinge: **Themen über Vorlesungen hinweg** (inkl.
+- Sie prüft fünf Dinge (das fünfte: jede Vorlesung einzeln, s. u.): **Themen über Vorlesungen hinweg** (inkl.
   Voraussetzungen und Widersprüchen zwischen Folien), **Klausurrelevanz**
   (was die Altklausuren wirklich fragen), **dein echtes Verständnis** und
   **den alten Plan selbst**: Jedes alte Thema muss im neuen Plan wieder
@@ -207,8 +207,19 @@ der Text darunter geht als Notiz mit).
   `<Fach>/Originale/` (liest LearnHarness nicht selbst): per Chat an Hermes
   oder automatisch aus iCloud über `integrations/mac/subject-sync.sh` (das
   Startsymbol kopiert beim Start und alle 15 Minuten).
-- Etappe 2 (noch offen): aus `plan.md` automatisch Sessions pro Thema,
-  Anzeige in Notch und Übersicht.
+- **Eine Session pro Vorlesung** (Paul, 2026-11-12): Die Überprüfung
+  analysiert zusätzlich **jede Datei in `Folien/`** für die Klausur – worum es
+  geht, Gewicht, Aufwand, was du beherrschen musst (mit Beleg aus den
+  Altklausuren), was nur kurz reicht, wie die Klausuren es abfragen. Fehlt
+  eine Vorlesung, wird der Lauf abgelehnt. Daraus schreibt LearnHarness den
+  Auftrag **`LearnHarness/Auftraege/<Fach> Vorlesungen.md`** (wird bei jedem
+  Lauf überschrieben – eigene Notizen in `fach.md`) und liest die Aufträge
+  gleich danach neu: Jede Vorlesung wird eine Session im Ordner
+  „<Klausur> Klausur“, Titel „<Fach>: <Dateiname>“ (stabil, nie doppelt), mit
+  Fortschritt, Notch, XP und `topic_status` wie jeder Auftrag. Die erste
+  Nachricht nennt Folien-Pfad, Altklausuren und den Klausur-Fokus; der Tutor
+  lehrt klausurorientiert. Vorhandene Folien bekommen beim ersten Lauf
+  nach dem Update ebenfalls Sessions (`REVIEW_VERSION` zwingt einen Lauf).
 
 ### 4. Startsymbol für den Mac
 

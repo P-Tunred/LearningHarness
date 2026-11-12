@@ -476,6 +476,10 @@ function startSubjectReviews(root: string): void {
 	})
 		.then((outcomes) => {
 			setStatus({ subjects: { running: null, outcomes, finishedAt: new Date().toISOString() } });
+			// A review writes its subject's lecture plan (Auftraege/<Fach>
+			// Vorlesungen.md): read the plans again now, so a new lecture's
+			// session appears without waiting for the next start.
+			if (outcomes.some((o) => o.status === "reviewed" && (o.lectures ?? 0) > 0)) runExamPlans(root);
 			// New plans are worth a fresh overview in the brain.
 			if (outcomes.some((o) => o.status === "reviewed")) scheduleExport();
 		})
