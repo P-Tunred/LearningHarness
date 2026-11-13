@@ -44,6 +44,10 @@ interface PlanState {
 	/** focusKey → the session created for it, with the focus as last read. */
 	sessions: Record<string, { chatId: string; title: string; weight: ExamWeight | null; effortHours?: number | null }>;
 	error?: string;
+	/** The file is gone from Auftraege/ (Paul, 2026-11-13: retiring a plan
+	 *  must stop it counting). Its sessions stay as ordinary chats and the
+	 *  bookkeeping stays, so a plan put back reuses them — never duplicates. */
+	retired?: boolean;
 }
 
 interface ExamState {
@@ -116,7 +120,11 @@ export function syncExamPlans(root: string): ExamSyncResult {
 	const state = readState(root);
 	state.folder = root;
 	const result: ExamSyncResult = { plans: 0, created: 0, errors: [] };
-	for (const file of scanExamPlans(root)) {
+	const present = new Set(scanExamPlans(root));
+	for (const [file, plan] of Object.entries(state.plans)) {
+		if (!present.has(file) && !plan.retired) state.plans[file] = { ...plan, retired: true };
+	}
+	for (const file of present) {
 		const full = path.join(root, ...EXAM_PLANS_DIR.split("/"), file);
 		const previous = state.plans[file];
 		let plan: ExamPlan;
@@ -131,6 +139,7 @@ export function syncExamPlans(root: string): ExamSyncResult {
 		}
 		result.plans++;
 		const since = previous?.since ?? firstSessionDay(previous?.sessions) ?? localDay(Date.now());
+		// A plan put back is live again (no `retired`), with its old sessions.
 		const entry: PlanState = { exam: plan.exam, date: plan.date, hoursPerWeek: plan.hoursPerWeek, reviewFrom: plan.reviewFrom, since, folderId: previous?.folderId ?? null, sessions: { ...previous?.sessions } };
 		const missing = plan.focuses.filter((f) => !entry.sessions[focusKey(f.title)]);
 		if (missing.length) entry.folderId = ensureFolder(plan, entry.folderId);
@@ -186,6 +195,7 @@ export interface ExamOverview {
 export function examOverviews(root: string): ExamOverview[] {
 	const state = readState(root);
 	return Object.values(state.plans)
+		.filter((p) => !p.retired)
 		.map((p) => ({
 			exam: p.exam,
 			date: p.date,

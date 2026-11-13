@@ -80,4 +80,17 @@ describe("exam plan sync", () => {
 		const md = fs.readFileSync(path.join(BRAIN, "wiki", "learnharness", "lernstand.md"), "utf-8");
 		assert.match(md, /## Klausuren\n\n### FODS — 2026-11-20\n\n1 von 3 Schwerpunkten angefangen/);
 	});
+
+	it("a plan taken out of Auftraege/ stops counting; put back, it reuses its sessions", () => {
+		const moved = path.join(BRAIN, "fods-stillgelegt.md.bak");
+		fs.renameSync(PLAN_FILE, moved);
+		const before = stores.chatStore.listChats().length;
+		syncExamPlans(BRAIN);
+		assert.deepEqual(examOverviews(BRAIN).map((o) => o.exam), [], "retired: no longer in progress, notch or export");
+		assert.equal(stores.chatStore.listChats().length, before, "its chats stay as ordinary chats");
+		fs.renameSync(moved, PLAN_FILE);
+		const back = syncExamPlans(BRAIN);
+		assert.equal(back.created, 0, "the old sessions are reused, none duplicated");
+		assert.deepEqual(examOverviews(BRAIN).map((o) => o.exam), ["FODS"]);
+	});
 });

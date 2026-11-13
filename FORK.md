@@ -220,6 +220,10 @@ der Text darunter geht als Notiz mit).
   Nachricht nennt Folien-Pfad, Altklausuren und den Klausur-Fokus; der Tutor
   lehrt klausurorientiert. Vorhandene Folien bekommen beim ersten Lauf
   nach dem Update ebenfalls Sessions (`REVIEW_VERSION` zwingt einen Lauf).
+- **Auftrag stilllegen:** Nimmt man eine Datei aus `Auftraege/` heraus (z. B.
+  nach `Auftraege/stillgelegt/`), zählt sie nicht mehr in Fortschritt, Notch
+  und Export; ihre Chats bleiben als normale Chats. Kommt die Datei zurück,
+  gelten die alten Sessions wieder – nichts wird doppelt angelegt.
 
 ### 4. Startsymbol für den Mac
 
