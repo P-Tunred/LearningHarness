@@ -139,15 +139,21 @@ export function syncExamPlans(root: string): ExamSyncResult {
 		}
 		result.plans++;
 		const since = previous?.since ?? firstSessionDay(previous?.sessions) ?? localDay(Date.now());
-		// A plan put back is live again (no `retired`), with its old sessions.
-		const entry: PlanState = { exam: plan.exam, date: plan.date, hoursPerWeek: plan.hoursPerWeek, reviewFrom: plan.reviewFrom, since, folderId: previous?.folderId ?? null, sessions: { ...previous?.sessions } };
-		const missing = plan.focuses.filter((f) => !entry.sessions[focusKey(f.title)]);
+		// Sessions are kept in the plan's section order (the learning path):
+		// a reordered plan reorders the sessions, so "up next" and the
+		// sidebar follow the file. Topics dropped from the file stay at the
+		// end — their chats and learning time are not thrown away. A plan
+		// put back after being retired is live again (no `retired` here).
+		const known = { ...previous?.sessions };
+		const entry: PlanState = { exam: plan.exam, date: plan.date, hoursPerWeek: plan.hoursPerWeek, reviewFrom: plan.reviewFrom, since, folderId: previous?.folderId ?? null, sessions: {} };
+		const missing = plan.focuses.filter((f) => !known[focusKey(f.title)]);
 		if (missing.length) entry.folderId = ensureFolder(plan, entry.folderId);
 		for (const focus of plan.focuses) {
 			const key = focusKey(focus.title);
-			const known = entry.sessions[key];
-			if (known) {
-				entry.sessions[key] = { ...known, weight: focus.weight, effortHours: focus.effortHours };
+			const session = known[key];
+			if (session) {
+				entry.sessions[key] = { ...session, weight: focus.weight, effortHours: focus.effortHours };
+				delete known[key];
 				continue;
 			}
 			const chatId = createFocusSession(focus.title);
@@ -156,6 +162,7 @@ export function syncExamPlans(root: string): ExamSyncResult {
 			entry.sessions[key] = { chatId, title: focus.title, weight: focus.weight, effortHours: focus.effortHours };
 			result.created++;
 		}
+		Object.assign(entry.sessions, known);
 		state.plans[file] = entry;
 	}
 	saveState(state);

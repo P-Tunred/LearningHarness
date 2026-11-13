@@ -181,8 +181,9 @@ Pro Fach ein Ordner im Brain: `LearnHarness/Faecher/<Fach>/` mit
 der Text darunter geht als Notiz mit).
 
 - Liegen **neue oder geänderte Dateien** im Fach-Ordner, läuft beim
-  App-Start **einmal** eine Überprüfung im Hintergrund (Strong-Modell, also
-  bei dir über Hermes). PDFs werden dafür einmal in Text umgewandelt und im
+  App-Start und danach **alle 15 Minuten, solange die App offen ist**, eine
+  Überprüfung im Hintergrund (Strong-Modell, also bei dir über Hermes;
+  ohne neue Dateien kostet die Prüfung nichts). PDFs werden dafür einmal in Text umgewandelt und im
   Datenordner zwischengespeichert (`faecher-cache/`).
 - Sie liest **alles**: alle Folien, die Altklausuren, den bisherigen
   `plan.md` (deine eigenen Änderungen daran inklusive) und deinen Lernstand im
@@ -224,6 +225,43 @@ der Text darunter geht als Notiz mit).
   nach `Auftraege/stillgelegt/`), zählt sie nicht mehr in Fortschritt, Notch
   und Export; ihre Chats bleiben als normale Chats. Kommt die Datei zurück,
   gelten die alten Sessions wieder – nichts wird doppelt angelegt.
+- **Etappe 2 — vom Fach zum Lernpfad (2026-11-11):** Ein von Hand (oder von
+  Claude) geschriebener Klausur-Auftrag
+  mit `fach: <Fach>` im Frontmatter (z. B. `Auftraege/intsec.md` mit
+  `fach: IntSec`) wächst mit dem Fach: Nach jeder Überprüfung hängt die App
+  **neue** Themen aus `plan.md` hinten an den Auftrag an (in Lernreihenfolge:
+  erst Voraussetzungen, niedrig gewichtete später; nie mehr als 20 Themen)
+  und legt dafür sofort Sessions an. Bestehende Abschnitte rührt sie nicht
+  an — Reihenfolge und Texte im Auftrag bleiben deine. Code:
+  `src/core/subject-exam-plan.ts`, `src/server/subject-exam-plan.ts`.
+- **Reihenfolge = Lernpfad:** Die Sessions eines Auftrags folgen der
+  Reihenfolge der Abschnitte in der Datei; verschiebst du dort ein Thema,
+  folgen „Up next“ und die Seitenleiste. Themen, die aus der Datei
+  verschwinden, behalten ihre Session (hinten).
+- **Der ganze Weg einer neuen Vorlesung:** Folien in iCloud `Uni/S5/INTSEC`
+  → (Startsymbol, alle 15 min) `Faecher/IntSec/Originale/` → (Hermes-Job
+  `learnharness-check`, stündlich) Volltext in `Folien/` → (App, alle
+  15 min) Überprüfung, `plan.md` → je Vorlesung eine Session (Auftrag
+  `<Fach> Vorlesungen.md`) bzw. neue Themen in einem Auftrag mit `fach:`.
+- **INTSEC (Stand 2026-11-13):** nur Vorlesungs-Sessions; der Themen-Auftrag
+  `intsec.md` liegt in `Auftraege/stillgelegt/`.
+
+### 3c. Fach-Umschalter (2026-11-11)
+
+Oben in der Notch (aufgeklappt) und links über der Session-Liste: **All ·
+FODS Theorie · INTSEC** (jeder laufende Klausur-Auftrag, nächste Klausur
+zuerst; erst ab zwei Aufträgen sichtbar). Beide Schalter sind dieselbe Wahl
+(auf diesem Gerät gemerkt):
+
+- **Links** stehen dann nur die Sessions dieses Fachs, in Lernreihenfolge;
+  der gerade offene Chat bleibt immer sichtbar. Übungs- und freie Chats
+  gehören keinem Fach und erscheinen nur unter „All“.
+- **Der Wissensgraph** zeigt nur, was in diesen Sessions gelernt wurde
+  (importierte Notizen zählen zu keinem Fach). Ist im Fach noch nichts
+  gelernt: „Nothing learned in INTSEC yet · Up next: …“ mit Link.
+- **Die Notch** spricht für das gewählte Fach (im Themen-Chat weiterhin für
+  dessen Klausur).
+- Code: `components/chosen-exam.ts`, `components/exam-switcher.tsx`.
 
 ### 4. Startsymbol für den Mac
 

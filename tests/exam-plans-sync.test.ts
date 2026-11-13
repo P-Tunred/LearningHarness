@@ -67,6 +67,15 @@ describe("exam plan sync", () => {
 		assert.equal(examOpeningPrompt(id), undefined);
 	});
 
+	it("a reordered plan reorders its sessions (the learning path), keeping every chat", () => {
+		const before = new Map(examOverviews(BRAIN)[0]!.focuses.map((f) => [f.title, f.chatId]));
+		writePlan(["Regularisierung", "Bias-Variance-Tradeoff", "Kreuzvalidierung"]);
+		assert.equal(syncExamPlans(BRAIN).created, 0);
+		const after = examOverviews(BRAIN)[0]!.focuses;
+		assert.deepEqual(after.map((f) => f.title), ["Regularisierung", "Bias-Variance-Tradeoff", "Kreuzvalidierung"]);
+		for (const f of after) assert.equal(f.chatId, before.get(f.title));
+	});
+
 	it("exports the exam with its progress into the stats and the overview", () => {
 		exportToBrain(BRAIN);
 		const stats = JSON.parse(fs.readFileSync(path.join(BRAIN, "wiki", "learnharness", "learnharness-stats.json"), "utf-8"));
