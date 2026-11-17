@@ -8,6 +8,23 @@
 
 <p align="center"><strong>An agent harness for learning.</strong></p>
 
+> **About this fork.** This is my personal fork of
+> [LearnHarness](https://github.com/amosblomqvist/learnharness) by Amos Blomqvist
+> (AGPL-3.0), which I use every day to prepare for my exams at TUM. The original
+> app is unchanged underneath; my additions are:
+>
+> - **Exam planning** — exam plans written in my notes become focused learning
+>   sessions, one per lecture, with a progress strip and a subject switcher.
+> - **Study timer** — measures real study time per subject and exports it.
+> - **Second Brain link** — learning progress flows into my Markdown knowledge
+>   base, documents flow in from an inbox folder.
+> - **Daily integration** — my [Daily](https://github.com/P-Tunred) dashboard reads the
+>   exported stats for its exam planner.
+> - **Window transparency** (macOS vibrancy) and a Mac launcher.
+>
+> Details (in German) are in [FORK.md](FORK.md). Everything below is the
+> original README. — Paul Dehmel
+
 <p align="center">
   <a href="https://learnharness.ai">Download</a> ·
   <a href="#how-it-works">How it works</a> ·
