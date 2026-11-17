@@ -18,7 +18,7 @@
 > - **Study timer** — measures real study time per subject and exports it.
 > - **Second Brain link** — learning progress flows into my Markdown knowledge
 >   base, documents flow in from an inbox folder.
-> - **Daily integration** — my [Daily](https://github.com/P-Tunred) dashboard reads the
+> - **Daily integration** — my [Daily](https://github.com/P-Tunred/daily) dashboard reads the
 >   exported stats for its exam planner.
 > - **Window transparency** (macOS vibrancy) and a Mac launcher.
 >
