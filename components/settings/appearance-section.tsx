@@ -209,6 +209,21 @@ export function AppearanceSection({
 				</ThinSelect>
 			</SettingsRow>
 			<SettingsRow
+				label="Style"
+				hint="G = Daily's style: one font, no capitals, round glass sheets; Original = LearnHarness"
+				testid="row-stil"
+			>
+				<ThinSelect
+					value={resolved.stil}
+					ariaLabel="style"
+					testid="select-stil"
+					onChange={(v) => onSectionChange({ ...appearance, stil: v === "original" ? "original" : undefined })}
+				>
+					<option value="g">G</option>
+					<option value="original">Original</option>
+				</ThinSelect>
+			</SettingsRow>
+			<SettingsRow
 				label="Background"
 				hint={resolved.theme === "glas" ? "Classic theme only" : `Empty = ${resolved.background ?? "#141414"}`}
 				testid="row-background"

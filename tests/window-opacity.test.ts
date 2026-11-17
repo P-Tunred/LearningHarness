@@ -74,9 +74,9 @@ describe("Glas theme (Daily's look, Paul 2026-11-17)", () => {
 		const vars = appearanceVars(glas, true);
 		assert.equal(vars["--background"], undefined, "no inline palette may override the glass");
 		assert.equal(vars["--card"], undefined);
-		assert.deepEqual(themeAttributes(glas, true), { theme: "glas", transparent: true });
-		assert.deepEqual(themeAttributes(glas, false), { theme: "glas", transparent: false }, "a browser tab gets the dark ground, not the white page");
-		assert.deepEqual(themeAttributes(resolveAppearance({ theme: "classic" }), true), { theme: "classic", transparent: false });
+		assert.deepEqual(themeAttributes(glas, true), { theme: "glas", stil: "g", transparent: true });
+		assert.deepEqual(themeAttributes(glas, false), { theme: "glas", stil: "g", transparent: false }, "a browser tab gets the dark ground, not the white page");
+		assert.deepEqual(themeAttributes(resolveAppearance({ theme: "classic", stil: "original" }), true), { theme: "classic", stil: "original", transparent: false });
 	});
 
 	it("the theme is validated on save and on disk", () => {
@@ -87,3 +87,25 @@ describe("Glas theme (Daily's look, Paul 2026-11-17)", () => {
 		assert.equal(resolveSettings(null).appearance.theme, "glas");
 	});
 });
+
+describe("Stil G (Daily's style, Paul 2026-11-17)", () => {
+	it("is the default and is validated on save and on disk", () => {
+		assert.equal(FACTORY_SETTINGS.appearance.stil, "g");
+		assert.equal(resolveSettings(null).appearance.stil, "g");
+		assert.equal(parseAppearanceSettingsBody({ stil: "original" }).ok, true);
+		assert.equal(parseAppearanceSettingsBody({ stil: "h" }).ok, false);
+		assert.equal(sanitizeUserSettings({ appearance: { stil: "original" } })?.appearance?.stil, "original");
+		assert.equal(sanitizeUserSettings({ appearance: { stil: "h" } })?.appearance?.stil, undefined);
+	});
+
+	it("ships Daily's font with its license", async () => {
+		const fs = await import("node:fs");
+		const dir = new URL("../public/fonts/schibsted/", import.meta.url);
+		const files = fs.readdirSync(dir);
+		assert.equal(files.filter((f) => f.endsWith(".woff2")).length, 4);
+		assert.match(fs.readFileSync(new URL("OFL.txt", dir), "utf8"), /SIL Open Font License/);
+		const css = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+		for (const f of files.filter((x) => x.endsWith(".woff2"))) assert.ok(css.includes(`/fonts/schibsted/${f}`), `${f} is referenced`);
+	});
+});
+

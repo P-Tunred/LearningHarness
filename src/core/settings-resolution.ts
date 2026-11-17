@@ -215,6 +215,7 @@ export function resolveSettings(record: UserSettings | null): EffectiveSettings 
 			},
 			windowOpacity: appearance.windowOpacity ?? factoryAppearance.windowOpacity,
 			theme: appearance.theme ?? factoryAppearance.theme,
+			stil: appearance.stil ?? factoryAppearance.stil,
 		},
 		graph: {
 			// Wave 7 collapse (owner ruling 2026-09-23): the master switch ONLY —

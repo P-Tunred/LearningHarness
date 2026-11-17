@@ -23,6 +23,14 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
   Hintergrundfarbe und „Window opacity“ gelten nur für Classic.
   Code: `app/globals.css` (Block „Glas“), `components/settings/appearance.tsx`
   (`themeAttributes`), `appearance-section.tsx`, `electron/main.cjs`.
+- **Stil „G“ (Standard seit 2026-11-17)**: Dailys Stil G (morning-dashboard
+  `src/g-stil.css`), wie Paul Daily nutzt: eine Schrift für alles
+  (**Schibsted Grotesk**, dieselben Dateien wie Daily, Lizenz SIL OFL in
+  `public/fonts/schibsted/OFL.txt`), Titel dünn (300), Beschriftungen in
+  normaler Schreibweise statt Versalien, runde Glasblätter (Haarlinie,
+  weicher Schatten, größere Radien). Code bleibt monospace; eine gewählte
+  Lese-Schrift und der Serif-Titel-Schalter gelten weiter.
+  Umschalten: **Settings → Appearance → Style: G / Original**.
 
 - **Settings → Appearance → Window opacity**: 100 = undurchsichtig (wie
   vorher), kleinere Zahl = durchsichtiger (Minimum 30).

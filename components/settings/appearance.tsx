@@ -38,6 +38,7 @@ export function resolveAppearance(delta: AppearanceSettings | undefined) {
 		},
 		windowOpacity: delta?.windowOpacity ?? f.windowOpacity,
 		theme: delta?.theme ?? f.theme,
+		stil: delta?.stil ?? f.stil,
 	};
 }
 
@@ -134,8 +135,8 @@ export function appearanceVars(
  *  the desktop window, whose native material shows the blurred desktop —
  *  in a browser tab the glass falls back to a dark ground instead of the
  *  white page (Daily's ADR-0004). Pure — exported for tests. */
-export function themeAttributes(a: ReturnType<typeof resolveAppearance>, desktop: boolean = inDesktopShell()): { theme: string; transparent: boolean } {
-	return { theme: a.theme, transparent: a.theme === "glas" && desktop };
+export function themeAttributes(a: ReturnType<typeof resolveAppearance>, desktop: boolean = inDesktopShell()): { theme: string; stil: string; transparent: boolean } {
+	return { theme: a.theme, stil: a.stil, transparent: a.theme === "glas" && desktop };
 }
 
 /** Pure: the previously-applied names ABSENT from the next var set —
@@ -199,9 +200,10 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
 	useEffect(() => {
 		const root = document.documentElement;
 		root.dataset.theme = attrs.theme;
+		root.dataset.stil = attrs.stil;
 		if (attrs.transparent) root.dataset.transparent = "1";
 		else delete root.dataset.transparent;
-	}, [attrs.theme, attrs.transparent]);
+	}, [attrs.theme, attrs.stil, attrs.transparent]);
 
 	// One fetch per app load: the record (sanitized server-side) carries the
 	// delta; resolution happens here against the compiled factory.

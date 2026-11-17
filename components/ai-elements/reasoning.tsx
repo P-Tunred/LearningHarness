@@ -138,7 +138,9 @@ const defaultGetThinkingMessage = (isStreaming: boolean) => {
   if (isStreaming) {
     return <Shimmer duration={1}>Thinking...</Shimmer>;
   }
-  return <p>AGENT’S THINKING</p>;
+  // Normal case in the text; the trigger's `uppercase` class keeps the
+  // capitals in the Original style, Stil G shows sentence case (fork).
+  return <p>Agent’s thinking</p>;
 };
 
 export const ReasoningTrigger = memo(

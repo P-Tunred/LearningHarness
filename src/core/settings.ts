@@ -426,10 +426,16 @@ export interface AppearanceSettings {
 	 *  look (default), "classic" = the original opaque grey look, where
 	 *  background and windowOpacity apply. */
 	theme?: AppearanceTheme;
+	/** Fork addition (Paul, 2026-11-17): Daily's "Stil" — "g" = one font
+	 *  (Schibsted Grotesk), sentence-case labels, round glass sheets (default,
+	 *  as Paul runs Daily); "original" = LearnHarness's mono/serif look. */
+	stil?: AppearanceStil;
 }
 
 export const APPEARANCE_THEMES = ["glas", "classic"] as const;
 export type AppearanceTheme = (typeof APPEARANCE_THEMES)[number];
+export const APPEARANCE_STILE = ["original", "g"] as const;
+export type AppearanceStil = (typeof APPEARANCE_STILE)[number];
 
 /** Knowledge-graph settings — a strict dependency ladder (owner decision
  *  2026-09-19): graph → embedding → clustering → labeling, each rung only
@@ -536,6 +542,7 @@ export interface FactorySettings {
 		};
 		windowOpacity: number;
 		theme: AppearanceTheme;
+		stil: AppearanceStil;
 	};
 	graph: Required<GraphSettings>;
 	compaction: Required<CompactionSettings>;
@@ -554,6 +561,7 @@ export const FACTORY_SETTINGS: FactorySettings = {
 		mdRendering: { headingWeight: 900, boldColor: null, italicColor: null },
 		windowOpacity: 100, // opaque — the classic look until the user lowers it
 		theme: "glas", // Daily's glass look (Paul, 2026-11-17)
+		stil: "g", // Daily's style G, as Paul runs Daily (2026-11-17)
 	},
 	graph: { enabled: true, rendering: true, extractionChunkTokens: 4096 },
 	compaction: { thresholdTokens: 150_000 },
@@ -794,6 +802,9 @@ function sanitizeAppearance(raw: Record<string, unknown>): AppearanceSettings {
 	}
 	if (typeof raw.theme === "string" && (APPEARANCE_THEMES as readonly string[]).includes(raw.theme)) {
 		out.theme = raw.theme as AppearanceTheme;
+	}
+	if (typeof raw.stil === "string" && (APPEARANCE_STILE as readonly string[]).includes(raw.stil)) {
+		out.stil = raw.stil as AppearanceStil;
 	}
 	return out;
 }
