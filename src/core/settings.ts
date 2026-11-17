@@ -422,7 +422,14 @@ export interface AppearanceSettings {
 	 *  through (macOS vibrancy / Windows acrylic blur). Text, cards, menus
 	 *  and dialogs stay opaque; only the base background is affected. */
 	windowOpacity?: number;
+	/** Fork addition (Paul, 2026-11-17): "glas" = Daily's see-through glass
+	 *  look (default), "classic" = the original opaque grey look, where
+	 *  background and windowOpacity apply. */
+	theme?: AppearanceTheme;
 }
+
+export const APPEARANCE_THEMES = ["glas", "classic"] as const;
+export type AppearanceTheme = (typeof APPEARANCE_THEMES)[number];
 
 /** Knowledge-graph settings — a strict dependency ladder (owner decision
  *  2026-09-19): graph → embedding → clustering → labeling, each rung only
@@ -528,6 +535,7 @@ export interface FactorySettings {
 			italicColor: string | null;
 		};
 		windowOpacity: number;
+		theme: AppearanceTheme;
 	};
 	graph: Required<GraphSettings>;
 	compaction: Required<CompactionSettings>;
@@ -544,7 +552,8 @@ export const FACTORY_SETTINGS: FactorySettings = {
 		proseFontSize: 16,
 		sessionNameSerif: true,
 		mdRendering: { headingWeight: 900, boldColor: null, italicColor: null },
-		windowOpacity: 100, // opaque — today's look until the user lowers it
+		windowOpacity: 100, // opaque — the classic look until the user lowers it
+		theme: "glas", // Daily's glass look (Paul, 2026-11-17)
 	},
 	graph: { enabled: true, rendering: true, extractionChunkTokens: 4096 },
 	compaction: { thresholdTokens: 150_000 },
@@ -782,6 +791,9 @@ function sanitizeAppearance(raw: Record<string, unknown>): AppearanceSettings {
 	if (raw.mdRendering !== undefined) out.mdRendering = sanitizeMdRendering(raw.mdRendering);
 	if (typeof raw.windowOpacity === "number" && Number.isFinite(raw.windowOpacity)) {
 		out.windowOpacity = clamp(Math.round(raw.windowOpacity), WINDOW_OPACITY_MIN, WINDOW_OPACITY_MAX);
+	}
+	if (typeof raw.theme === "string" && (APPEARANCE_THEMES as readonly string[]).includes(raw.theme)) {
+		out.theme = raw.theme as AppearanceTheme;
 	}
 	return out;
 }

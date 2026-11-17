@@ -646,3 +646,95 @@ body {
 	outline: 1px solid var(--border);
 	border-radius: 0.25rem;
 }
+
+/* ============================================================
+   Glas — Daily's see-through look (fork addition, Paul 2026-11-17).
+   Values copied 1:1 from the morning dashboard's "glas" theme
+   (morning-dashboard src/index.css [data-theme="glas"], ADR-0004):
+   the window is always transparent (electron/main.cjs) and macOS
+   blurs the desktop behind it (vibrancy "fullscreen-ui"); surfaces
+   carry only a breath of blue tint, legibility comes from blur.
+   In a browser tab there is no desktop behind the page, only the
+   white canvas — so without data-transparent (set only in the
+   desktop window, components/settings/appearance.tsx) the ground
+   falls back to Mocha's dark #181825, as in Daily.
+   Classic (data-theme="classic") keeps the palette above untouched.
+   ============================================================ */
+html[data-theme="glas"] {
+	--background: #181825;
+	--foreground: #ededf4;
+	--card: rgba(20, 32, 46, 0.17);
+	--card-foreground: #ededf4;
+	/* Menus and dialogs a little denser (Daily's .glass-strong), or they
+	   read as solid blocks — or not at all — on an almost invisible UI. */
+	--popover: rgba(30, 30, 46, 0.46);
+	--popover-foreground: #ededf4;
+	--primary: #ededf4;
+	--primary-foreground: #11111b;
+	--secondary: rgba(20, 32, 46, 0.17);
+	--secondary-foreground: #ededf4;
+	--muted: rgba(20, 32, 46, 0.17);
+	--muted-foreground: rgba(237, 237, 244, 0.68);
+	/* shadcn's "accent" is the hover/selected surface, not a color accent. */
+	--accent: rgba(237, 237, 244, 0.1);
+	--accent-foreground: #ededf4;
+	--border: rgba(237, 237, 244, 0.14);
+	--input: rgba(237, 237, 244, 0.24);
+	--ring: rgba(237, 237, 244, 0.36);
+	/* Daily's semantic colors: ok/accent = moonlight blue, warning = moon
+	   gold, critical = warm rock (warm against the cool accent). Tailwind's
+	   utilities read these theme variables, so every green-500/amber/red
+	   bar, dot and label follows. The XP float (green-400/red-400) and the
+	   timer's aura keep their own green on purpose (Paul, 2026-11-17). */
+	--color-green-500: #4497e4;
+	--color-green-600: #1f73c1;
+	--color-amber-500: #dcba6a;
+	--color-amber-400: #dcba6a;
+	--color-red-500: #d37e69;
+	--lh-glass-blur: 80px;
+	--lh-glass-saturate: 1.7;
+}
+
+/* The desktop window: nothing painted, the desktop shows (blurred by
+   macOS). Only a breath of shade at the edges so text near a bright
+   desktop stays legible (Daily's .veil). */
+html[data-theme="glas"][data-transparent="1"] {
+	--background: transparent;
+	background: transparent;
+}
+html[data-theme="glas"][data-transparent="1"] body {
+	background:
+		linear-gradient(90deg, rgba(17, 17, 27, 0.24) 0%, rgba(17, 17, 27, 0) 28%, rgba(17, 17, 27, 0) 72%, rgba(17, 17, 27, 0.24) 100%),
+		linear-gradient(180deg, rgba(17, 17, 27, 0.2) 0%, rgba(17, 17, 27, 0) 20%, rgba(17, 17, 27, 0) 80%, rgba(17, 17, 27, 0.18) 100%);
+}
+
+/* Floating surfaces blur what scrolls beneath them (the chat behind the
+   notch, the timer, menus, dialogs, the answer dock) — Daily's glass
+   material. The desktop itself is blurred by macOS, not by this. */
+html[data-theme="glas"] :is([class*="bg-card"], [class*="bg-popover"], .lh-glass) {
+	backdrop-filter: blur(var(--lh-glass-blur)) saturate(var(--lh-glass-saturate));
+}
+/* The chat's answer dock: blurred glass instead of a solid fade, so the
+   transcript scrolling under it turns to frost rather than clashing. One
+   blur over the whole dock, faded in over the top 96px by a mask — no
+   hard edge where the input block begins. */
+html[data-theme="glas"] .lh-dock {
+	backdrop-filter: blur(24px) saturate(var(--lh-glass-saturate));
+	mask-image: linear-gradient(to bottom, transparent 0, black 96px);
+}
+html[data-theme="glas"] .lh-dock-fade {
+	background: none;
+}
+
+html[data-theme="glas"] ::selection {
+	background-color: rgba(169, 161, 255, 0.34);
+	color: #fff;
+}
+
+/* Dialog backdrops: barely darken — behind the window is the desktop, and
+   a dialog should not wall it off; the separation comes from blur
+   (Daily's --overlay-bg / --overlay-blur for "glas"). */
+html[data-theme="glas"] [class~="bg-background/80"] {
+	background: rgba(11, 20, 31, 0.3);
+	backdrop-filter: blur(14px);
+}

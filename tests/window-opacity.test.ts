@@ -25,20 +25,20 @@ describe("appearanceVars — window opacity", () => {
 	});
 
 	it("desktop + lowered opacity: only --background turns translucent", () => {
-		const vars = appearanceVars(resolveAppearance({ windowOpacity: 50 }), true);
+		const vars = appearanceVars(resolveAppearance({ theme: "classic", windowOpacity: 50 }), true);
 		assert.equal(vars["--background"], "#14141480", "default dark background at 50%");
 		assert.equal(vars["--card"], undefined, "raised surfaces stay on the opaque stylesheet value");
 	});
 
 	it("a custom background keeps its derived opaque palette, base goes translucent", () => {
-		const vars = appearanceVars(resolveAppearance({ background: "#101820", windowOpacity: 60 }), true);
+		const vars = appearanceVars(resolveAppearance({ theme: "classic", background: "#101820", windowOpacity: 60 }), true);
 		assert.equal(vars["--background"], "#10182099");
 		assert.equal(vars["--card"], "#182028");
 		assert.equal(vars["--primary-foreground"], "#101820", "inverted text stays opaque");
 	});
 
 	it("plain browser: opacity is ignored (no desktop material behind the page)", () => {
-		const vars = appearanceVars(resolveAppearance({ windowOpacity: 50 }), false);
+		const vars = appearanceVars(resolveAppearance({ theme: "classic", windowOpacity: 50 }), false);
 		assert.equal(vars["--background"], undefined);
 	});
 });
@@ -63,5 +63,27 @@ describe("windowOpacity persistence", () => {
 		assert.equal(junk?.appearance?.windowOpacity, undefined);
 		assert.equal(resolveSettings(null).appearance.windowOpacity, 100);
 		assert.equal(resolveSettings({ version: 1, appearance: { windowOpacity: 70 } }).appearance.windowOpacity, 70);
+	});
+});
+
+describe("Glas theme (Daily's look, Paul 2026-11-17)", () => {
+	it("is the default; background and window opacity stay classic-only", async () => {
+		const { themeAttributes } = await import("../components/settings/appearance.tsx");
+		assert.equal(FACTORY_SETTINGS.appearance.theme, "glas");
+		const glas = resolveAppearance({ background: "#101820", windowOpacity: 50 });
+		const vars = appearanceVars(glas, true);
+		assert.equal(vars["--background"], undefined, "no inline palette may override the glass");
+		assert.equal(vars["--card"], undefined);
+		assert.deepEqual(themeAttributes(glas, true), { theme: "glas", transparent: true });
+		assert.deepEqual(themeAttributes(glas, false), { theme: "glas", transparent: false }, "a browser tab gets the dark ground, not the white page");
+		assert.deepEqual(themeAttributes(resolveAppearance({ theme: "classic" }), true), { theme: "classic", transparent: false });
+	});
+
+	it("the theme is validated on save and on disk", () => {
+		assert.equal(parseAppearanceSettingsBody({ theme: "classic" }).ok, true);
+		assert.equal(parseAppearanceSettingsBody({ theme: "neon" }).ok, false);
+		assert.equal(sanitizeUserSettings({ appearance: { theme: "classic" } })?.appearance?.theme, "classic");
+		assert.equal(sanitizeUserSettings({ appearance: { theme: "neon" } })?.appearance?.theme, undefined);
+		assert.equal(resolveSettings(null).appearance.theme, "glas");
 	});
 });

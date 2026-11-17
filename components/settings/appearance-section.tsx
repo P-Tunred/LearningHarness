@@ -194,9 +194,25 @@ export function AppearanceSection({
 				</ThinSelect>
 			</SettingsRow>
 			<SettingsRow
+				label="Theme"
+				hint="Glas = Daily's see-through look (desktop app); Classic = opaque grey"
+				testid="row-theme"
+			>
+				<ThinSelect
+					value={resolved.theme}
+					ariaLabel="theme"
+					testid="select-theme"
+					onChange={(v) => onSectionChange({ ...appearance, theme: v === "classic" ? "classic" : undefined })}
+				>
+					<option value="glas">Glas</option>
+					<option value="classic">Classic</option>
+				</ThinSelect>
+			</SettingsRow>
+			<SettingsRow
 				label="Background"
-				hint={`Empty = ${resolved.background ?? "#141414"}`}
+				hint={resolved.theme === "glas" ? "Classic theme only" : `Empty = ${resolved.background ?? "#141414"}`}
 				testid="row-background"
+				dimmed={resolved.theme === "glas"}
 			>
 				<CommitInput
 					value={appearance?.background ?? ""}
@@ -208,8 +224,9 @@ export function AppearanceSection({
 			</SettingsRow>
 			<SettingsRow
 				label="Window opacity"
-				hint={`${resolved.windowOpacity}% · ${WINDOW_OPACITY_MIN}–${WINDOW_OPACITY_MAX}, lower = see-through (desktop app)`}
+				hint={resolved.theme === "glas" ? "Classic theme only" : `${resolved.windowOpacity}% · ${WINDOW_OPACITY_MIN}–${WINDOW_OPACITY_MAX}, lower = see-through (desktop app)`}
 				testid="row-window-opacity"
+				dimmed={resolved.theme === "glas"}
 			>
 				<CommitInput
 					type="number"

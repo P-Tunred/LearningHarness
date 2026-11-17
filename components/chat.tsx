@@ -2351,8 +2351,11 @@ function DockOverlay({
 	});
 
 	return (
-		<div className="pointer-events-none absolute inset-x-0 bottom-0" style={{ right: sbInset }}>
-			<div className="h-24 bg-gradient-to-t from-background via-background/85 to-transparent" />
+		<div className="lh-dock pointer-events-none absolute inset-x-0 bottom-0" style={{ right: sbInset }}>
+			{/* lh-dock / lh-dock-fade: the Glas theme frosts the transcript
+			    under the dock, fading in softly, instead of painting a solid
+			    fade (fork, app/globals.css). */}
+			<div className="lh-dock-fade h-24 bg-gradient-to-t from-background via-background/85 to-transparent" />
 			<div ref={blockRef} className="relative bg-background pb-5">
 				<div className={DOCK}>
 					<div ref={viewportRef} data-dock-viewport="" className="pointer-events-auto">

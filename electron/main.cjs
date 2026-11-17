@@ -289,7 +289,10 @@ function killServer() {
 /** The native window material behind the renderer (see createWindow). */
 function windowMaterial() {
 	if (process.platform === "darwin") {
-		return { backgroundColor: "#00000000", vibrancy: "under-window", visualEffectState: "active" };
+		// "fullscreen-ui" = the material Daily's glass uses (morning-dashboard
+		// electron/main.cjs, ADR-0004): macOS blurs the desktop behind the
+		// see-through Glas theme (Paul, 2026-11-17).
+		return { backgroundColor: "#00000000", vibrancy: "fullscreen-ui", visualEffectState: "active" };
 	}
 	if (process.platform === "win32") {
 		// Acrylic needs Windows 11 22H2+; older Windows ignores it and the

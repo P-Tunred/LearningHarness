@@ -83,6 +83,7 @@ describe("appearanceVars — the mapping the provider applies", () => {
 	it("full delta: every knob lands on its token", () => {
 		const vars = appearanceVars(
 			resolveAppearance({
+				theme: "classic", // background belongs to the classic theme
 				background: "#101820",
 				fontFamily: "Georgia",
 				proseFontSize: 18,
@@ -111,6 +112,7 @@ describe("staleVarNames — the removal half of application (owner repro: resets
 	it("a full delta applied, then factory: every delta-only name goes stale", () => {
 		const fullDelta = appearanceVars(
 			resolveAppearance({
+				theme: "classic",
 				background: "#101820",
 				fontFamily: "Georgia",
 				sessionNameSerif: false,
@@ -130,8 +132,8 @@ describe("staleVarNames — the removal half of application (owner repro: resets
 	});
 
 	it("an empty background commit (null = factory) frees the palette vars", () => {
-		const withBg = appearanceVars(resolveAppearance({ background: "#101010" }));
-		const emptied = appearanceVars(resolveAppearance({ background: null }));
+		const withBg = appearanceVars(resolveAppearance({ theme: "classic", background: "#101010" }));
+		const emptied = appearanceVars(resolveAppearance({ theme: "classic", background: null }));
 		const stale = staleVarNames(Object.keys(withBg), emptied);
 		assert.ok(stale.includes("--background"));
 		assert.ok(stale.includes("--card"), "the derived palette follows the background out");

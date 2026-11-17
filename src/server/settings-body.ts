@@ -27,7 +27,7 @@ import type {
 	ModelSlot,
 	RoleModelOverride,
 } from "../core/settings.ts";
-import { BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS, WINDOW_OPACITY_MAX, WINDOW_OPACITY_MIN, isBrainFolder } from "../core/settings.ts";
+import { APPEARANCE_THEMES, BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS, WINDOW_OPACITY_MAX, WINDOW_OPACITY_MIN, isBrainFolder } from "../core/settings.ts";
 import { WRITABLE_TOOL_KEYS } from "../core/pending.ts";
 import { isDictationLanguage } from "../core/dictation.ts";
 
@@ -301,6 +301,12 @@ export function parseAppearanceSettingsBody(body: unknown): SettingsBodyResult<A
 			};
 		}
 		settings.windowOpacity = raw.windowOpacity;
+	}
+	if (raw.theme !== undefined) {
+		if (typeof raw.theme !== "string" || !(APPEARANCE_THEMES as readonly string[]).includes(raw.theme)) {
+			return { ok: false, error: `theme must be one of ${APPEARANCE_THEMES.join(", ")}` };
+		}
+		settings.theme = raw.theme as AppearanceSettings["theme"];
 	}
 	return { ok: true, settings };
 }

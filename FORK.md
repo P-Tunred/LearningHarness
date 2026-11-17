@@ -10,6 +10,20 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
 
 ### 1. Durchsichtiges Fenster (Fenster-Transparenz)
 
+- **Thema „Glas“ (Standard seit 2026-11-17)**: Dailys durchsichtiger Look
+  1:1 übernommen (morning-dashboard `src/index.css` `[data-theme="glas"]`,
+  ADR-0004). Fenster durchsichtig, macOS zeichnet den Schreibtisch weich
+  (`vibrancy: "fullscreen-ui"`); Karten nur 17 % blau getönt, Menüs und
+  Dialoge 46 %, starke Unschärfe auf schwebenden Flächen (Notch, Timer,
+  Menüs, Dialoge, Antwortbereich), leichter Schleier an den Fensterkanten,
+  Dailys Farben (Akzent Mondlicht-Blau `#4497E4`, Warnung Gold, kritisch
+  warmer Fels; XP und Timer-Rand bleiben grün). Im Browser ohne echtes
+  Fenster fällt es auf Dailys dunklen Grund `#181825` zurück.
+  Umschalten: **Settings → Appearance → Theme: Glas / Classic**.
+  Hintergrundfarbe und „Window opacity“ gelten nur für Classic.
+  Code: `app/globals.css` (Block „Glas“), `components/settings/appearance.tsx`
+  (`themeAttributes`), `appearance-section.tsx`, `electron/main.cjs`.
+
 - **Settings → Appearance → Window opacity**: 100 = undurchsichtig (wie
   vorher), kleinere Zahl = durchsichtiger (Minimum 30).
 - macOS: Milchglas-Effekt (Vibrancy). Windows 11: Acrylic. Linux: bleibt

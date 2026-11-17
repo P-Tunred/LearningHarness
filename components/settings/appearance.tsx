@@ -37,6 +37,7 @@ export function resolveAppearance(delta: AppearanceSettings | undefined) {
 			italicColor: delta?.mdRendering?.italicColor ?? f.mdRendering.italicColor,
 		},
 		windowOpacity: delta?.windowOpacity ?? f.windowOpacity,
+		theme: delta?.theme ?? f.theme,
 	};
 }
 
@@ -99,11 +100,15 @@ export function appearanceVars(
 	desktop: boolean = inDesktopShell(),
 ): Record<string, string> {
 	const vars: Record<string, string> = {};
-	if (a.background !== null) Object.assign(vars, derivedPalette(a.background));
+	// Glas (Daily's look) brings its own palette in app/globals.css
+	// (html[data-theme="glas"]); background and window opacity belong to
+	// the classic theme only, so no inline var may override the glass.
+	const classic = a.theme === "classic";
+	if (classic && a.background !== null) Object.assign(vars, derivedPalette(a.background));
 	// Window transparency: ONLY the base background turns translucent —
 	// cards, popovers, inputs' edges and dialogs keep their opaque derived
 	// colors so text stays readable. 100 = leave the opaque value in place.
-	if (desktop && a.windowOpacity < 100) {
+	if (classic && desktop && a.windowOpacity < 100) {
 		vars["--background"] = withOpacity(a.background ?? DEFAULT_DARK_BACKGROUND, a.windowOpacity);
 	}
 	if (a.fontFamily !== null) {
@@ -122,6 +127,15 @@ export function appearanceVars(
 	if (a.mdRendering.boldColor !== null) vars["--lh-ink-strong"] = a.mdRendering.boldColor;
 	if (a.mdRendering.italicColor !== null) vars["--lh-ink-italic"] = a.mdRendering.italicColor;
 	return vars;
+}
+
+/** The <html> attributes the theme needs (Paul, 2026-11-17): `data-theme`
+ *  picks the palette in app/globals.css; `data-transparent` is set only in
+ *  the desktop window, whose native material shows the blurred desktop —
+ *  in a browser tab the glass falls back to a dark ground instead of the
+ *  white page (Daily's ADR-0004). Pure — exported for tests. */
+export function themeAttributes(a: ReturnType<typeof resolveAppearance>, desktop: boolean = inDesktopShell()): { theme: string; transparent: boolean } {
+	return { theme: a.theme, transparent: a.theme === "glas" && desktop };
 }
 
 /** Pure: the previously-applied names ABSENT from the next var set —
@@ -179,6 +193,15 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
 			appliedNamesRef.current.add(name);
 		}
 	}, [key, vars]);
+
+	// The theme attributes (Glas / Classic) on <html>.
+	const attrs = useMemo(() => themeAttributes(resolveAppearance(delta)), [delta]);
+	useEffect(() => {
+		const root = document.documentElement;
+		root.dataset.theme = attrs.theme;
+		if (attrs.transparent) root.dataset.transparent = "1";
+		else delete root.dataset.transparent;
+	}, [attrs.theme, attrs.transparent]);
 
 	// One fetch per app load: the record (sanitized server-side) carries the
 	// delta; resolution happens here against the compiled factory.
