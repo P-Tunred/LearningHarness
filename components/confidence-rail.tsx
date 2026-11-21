@@ -21,14 +21,17 @@ import { CONFIDENCE_STOPS } from "@/src/core";
  * color. Ticks skip 0 and 100 (the rail's ends already say those).
  */
 
-/** The six-step ramp (owner ruling): 0 red → 100 emerald, indexed by stop. */
+/** The six-step ramp (owner ruling): 0 red → 100 emerald, indexed by stop.
+ *  Each step reads a CSS variable first (fork, Paul 2026-11-21): the Glas
+ *  theme sets --lh-confidence-0…5 to Daily's colors (warm rock → moon gold
+ *  → moonlight blue, app/globals.css); Classic falls back to these. */
 export const CONFIDENCE_COLORS: readonly string[] = [
-	"#ef4444", // 0
-	"#f97316", // 30
-	"#eab308", // 50
-	"#84cc16", // 70
-	"#22c55e", // 90
-	"#10b981", // 100
+	"var(--lh-confidence-0, #ef4444)", // 0
+	"var(--lh-confidence-1, #f97316)", // 30
+	"var(--lh-confidence-2, #eab308)", // 50
+	"var(--lh-confidence-3, #84cc16)", // 70
+	"var(--lh-confidence-4, #22c55e)", // 90
+	"var(--lh-confidence-5, #10b981)", // 100
 ];
 
 /** The rail's paint for a stop value (0–100). */

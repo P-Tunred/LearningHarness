@@ -691,6 +691,15 @@ html[data-theme="glas"] {
 	--color-amber-500: #dcba6a;
 	--color-amber-400: #dcba6a;
 	--color-red-500: #d37e69;
+	/* The confidence slider/rail (components/confidence-rail.tsx), stops
+	   0/30/50/70/90/100: warm rock → moon gold → moonlight blue, the steps
+	   between blended (Paul, 2026-11-21). */
+	--lh-confidence-0: #d37e69;
+	--lh-confidence-1: #d89c6a;
+	--lh-confidence-2: #dcba6a;
+	--lh-confidence-3: #93a99b;
+	--lh-confidence-4: #5f9fd9;
+	--lh-confidence-5: #4497e4;
 	--lh-glass-blur: 80px;
 	--lh-glass-saturate: 1.7;
 }
