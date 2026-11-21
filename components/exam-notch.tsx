@@ -158,6 +158,7 @@ export function ExamNotch() {
 	if (!p) return null;
 	const s = STANDING[p.standing];
 	const more = exams.length - 1;
+	const narrowHidden = open ? undefined : "max-[1899px]:hidden";
 
 	return (
 		<>
@@ -184,10 +185,13 @@ export function ExamNotch() {
 			>
 				<span className="flex w-full min-w-0 items-baseline gap-2 whitespace-nowrap text-xs tabular-nums">
 					<span className="min-w-0 truncate font-medium text-foreground">{p.exam}</span>
-					<span className="shrink-0 text-muted-foreground/60">·</span>
-					<span className={cn("shrink-0 font-medium", s.tone)}>{standingLabel(p)}</span>
-					<span className="shrink-0 text-muted-foreground/60">·</span>
-					<span className="shrink-0 text-muted-foreground">{todayLine(p)}</span>
+					{/* Narrow window (< 1900px), notch closed: subject, bar and +N
+					    only, so the graph's search magnifier beside it stays free
+					    (fork, Paul 2026-11-21); opening shows the full line. */}
+					<span className={cn("shrink-0 text-muted-foreground/60", narrowHidden)}>·</span>
+					<span className={cn("shrink-0 font-medium", s.tone, narrowHidden)}>{standingLabel(p)}</span>
+					<span className={cn("shrink-0 text-muted-foreground/60", narrowHidden)}>·</span>
+					<span className={cn("shrink-0 text-muted-foreground", narrowHidden)}>{todayLine(p)}</span>
 					{more > 0 && <span className="shrink-0 text-muted-foreground/70">+{more}</span>}
 					<ChevronDownIcon className={cn("size-3 shrink-0 self-center text-muted-foreground transition-transform", open && "rotate-180")} />
 				</span>

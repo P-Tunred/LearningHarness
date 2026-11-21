@@ -869,7 +869,12 @@ export function GraphChromeRow({
 	return (
 		<>
 			{!isEmpty && (
-				<div className="graph-chrome-fade-in w-56 min-w-0 shrink rounded-xl border bg-card/85 px-1 py-[3px] shadow-lg backdrop-blur">
+				// Narrow window (< 1900px, fork, Paul 2026-11-21): the field folds
+				// to its magnifier so the subject notch (top center) never sits on
+				// it. The input stays mounted under the icon, so a click or ⌘F
+				// focuses it and focus-within unfolds it; it stays open while it
+				// holds a query (placeholder hidden). Pure CSS, no state.
+				<div className="graph-chrome-fade-in w-9 min-w-0 shrink rounded-xl border bg-card/85 px-1 py-[3px] shadow-lg backdrop-blur transition-[width] duration-200 focus-within:w-56 has-[input:not(:placeholder-shown)]:w-56 min-[1900px]:w-56">
 					<Hint
 						// ⌘F focuses node search (surface-scoped registry action).
 						label="Search nodes"
@@ -877,7 +882,7 @@ export function GraphChromeRow({
 						side="bottom"
 					>
 					<div className="relative">
-						<SearchIcon className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+						<SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
 						<input
 							ref={searchInputRef}
 							value={query}

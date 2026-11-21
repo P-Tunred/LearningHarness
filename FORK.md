@@ -23,13 +23,24 @@ stehen unten. Updates vom Original lassen sich jederzeit nachziehen
   Hintergrundfarbe und „Window opacity“ gelten nur für Classic.
   Code: `app/globals.css` (Block „Glas“), `components/settings/appearance.tsx`
   (`themeAttributes`), `appearance-section.tsx`, `electron/main.cjs`.
+  Seit 2026-11-21 auch der Sicherheits-Balken bei Quizfragen in Dailys
+  Farben (warmer Fels → Mondgold → Mondlicht-Blau, Variablen
+  `--lh-confidence-0…5`, `components/confidence-rail.tsx`); Classic bleibt
+  Rot → Grün.
+- **Schmales Fenster (< 1900 px, seit 2026-11-21)**: Die Knotensuche der
+  Graph-Ansicht ist nur eine Lupe (Klick oder ⌘F klappt sie auf, offen,
+  solange Text drinsteht), und die geschlossene Fach-Notch zeigt nur Fach,
+  Balken und „+N“. So liegt die Notch nicht mehr über der Suche.
+  Code: `components/graph-view.tsx`, `components/exam-notch.tsx`.
 - **Stil „G“ (Standard seit 2026-11-17)**: Dailys Stil G (morning-dashboard
   `src/g-stil.css`), wie Paul Daily nutzt: eine Schrift für alles
   (**Schibsted Grotesk**, dieselben Dateien wie Daily, Lizenz SIL OFL in
   `public/fonts/schibsted/OFL.txt`), Titel dünn (300), Beschriftungen in
   normaler Schreibweise statt Versalien, runde Glasblätter (Haarlinie,
   weicher Schatten, größere Radien). Code bleibt monospace; eine gewählte
-  Lese-Schrift und der Serif-Titel-Schalter gelten weiter.
+  Lese-Schrift und der Serif-Titel-Schalter gelten weiter. „Your thinking“
+  steht seit 2026-11-21 ebenfalls in normaler Schreibweise (Original zeigt
+  weiter Versalien über die `uppercase`-Klasse).
   Umschalten: **Settings → Appearance → Style: G / Original**.
 
 - **Settings → Appearance → Window opacity**: 100 = undurchsichtig (wie
